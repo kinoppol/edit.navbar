@@ -1,0 +1,4 @@
+# Deny PHP execution in this directory — uploaded files only
+php_flag engine off
+Options -ExecCGI -Indexes
+AddHandler cgi-script .php .phtml .php3 .php4 .php5 .php7 .phar
