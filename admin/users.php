@@ -7,6 +7,18 @@ require_once __DIR__ . '/_layout.php';
 $adminUser = require_admin();
 $selfId    = $adminUser['id'];
 
+// Generate a readable temporary password (no ambiguous chars like 0/O, 1/l/I)
+function rvc_temp_password(int $len = 12): string
+{
+    $alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
+    $max      = strlen($alphabet) - 1;
+    $out      = '';
+    for ($i = 0; $i < $len; $i++) {
+        $out .= $alphabet[random_int(0, $max)];
+    }
+    return $out;
+}
+
 $flash     = '';
 $flashType = 'success';
 $editing   = null;
@@ -23,6 +35,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $flash = 'ลบผู้ใช้เรียบร้อยแล้ว';
         } else {
             $flash     = 'ไม่สามารถลบบัญชีของตัวเองได้';
+            $flashType = 'error';
+        }
+
+    } elseif ($action === 'reset_password') {
+        $id = (int) ($_POST['id'] ?? 0);
+        $stmt = db()->prepare("SELECT name FROM users WHERE id = ?");
+        $stmt->execute([$id]);
+        $target = $stmt->fetch();
+        if ($target) {
+            $temp = rvc_temp_password();
+            db()->prepare("UPDATE users SET password_hash = ? WHERE id = ?")
+                ->execute([password_hash($temp, PASSWORD_BCRYPT), $id]);
+            $flash = 'รีเซ็ตรหัสผ่านของ <strong>' . e($target['name']) . '</strong> แล้ว · '
+                   . 'รหัสผ่านชั่วคราว: <code style="font-size:14px;background:var(--surface-2);padding:2px 8px;border-radius:6px">'
+                   . e($temp) . '</code> — โปรดแจ้งผู้ใช้และให้เปลี่ยนรหัสผ่านทันที';
+            $flashType = 'success';
+        } else {
+            $flash     = 'ไม่พบผู้ใช้ที่ต้องการรีเซ็ต';
             $flashType = 'error';
         }
 
@@ -229,6 +259,15 @@ $base = APP_BASE;
         <td class="actions">
           <div style="display:flex;gap:6px">
             <a href="?edit=<?= (int) $u['id'] ?>" class="a-btn a-btn-ghost" style="padding:6px 12px;font-size:13px">แก้ไข</a>
+
+            <form method="POST" style="display:inline"
+                  onsubmit="return confirm('รีเซ็ตรหัสผ่านของ \"<?= e($u['name']) ?>\" เป็นรหัสชั่วคราวแบบสุ่ม?\n\nระบบจะแสดงรหัสใหม่ให้คัดลอกหลังยืนยัน')">
+              <input type="hidden" name="_csrf"  value="<?= e($csrf) ?>">
+              <input type="hidden" name="action" value="reset_password">
+              <input type="hidden" name="id"     value="<?= (int) $u['id'] ?>">
+              <button type="submit" class="a-btn a-btn-ghost" style="padding:6px 12px;font-size:13px">รีเซ็ตรหัสผ่าน</button>
+            </form>
+
             <?php if ((int) $u['id'] !== $selfId): ?>
             <form method="POST" style="display:inline"
                   onsubmit="return confirm('ยืนยันการลบผู้ใช้ \"<?= e($u['name']) ?>\"?')">

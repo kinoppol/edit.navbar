@@ -27,7 +27,7 @@ All DB constants (`DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASS`) are def
 ### Request lifecycle
 
 1. Every page starts with `require_once 'config/db.php'` then `config/auth.php`.
-2. Protected pages call `require_auth()` (redirects to `login.php` if no session) or `require_admin()` (additionally enforces `role = 'admin'`). `index.php` is public — it calls `current_user()` which returns `null` for unauthenticated visitors.
+2. Protected pages call `require_auth()` (redirects to `login.php` if no session) or `require_admin()` (additionally enforces `role = 'admin'`). `index.php` is public — it calls `current_user()` which returns `null` for unauthenticated visitors. `account.php` is the self-service password-change page for any logged-in user (calls `require_auth()`); it verifies the current password with `password_verify`, enforces an 8-char minimum, and calls `session_regenerate_id(true)` after a successful change. Admins can also reset *any* user's password from `admin/users.php` (the `reset_password` action sets a random temporary password via `rvc_temp_password()` and shows it once in the flash) or by entering a new one in the user edit form.
 3. `index.php` fetches all data server-side and embeds it as `window.__RVC__` JSON before the React `<script>` tags. React reads this object at startup — there is **no separate initial API call**.
 4. After mount, the React app calls the JSON API endpoints only on user interaction (drag-to-reorder, mark-read).
 
@@ -43,15 +43,27 @@ All DB constants (`DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASS`) are def
 | Table | Purpose |
 |---|---|
 | `users` | Auth credentials, name, initials, avatar colour, role (`user`/`admin`) |
-| `apps` | App catalogue: slug, name, description, colour, glyph_type, glyph, URL, is_active, sort_order |
+| `apps` | App catalogue: slug, name, description, colour, glyph_type, glyph, URL, is_active, `is_beta`, sort_order |
 | `user_app_prefs` | Per-user overrides: `(user_id, app_id)` PK, `is_hidden`, `sort_order` |
 | `notifications` | Per-user notification feed linked to an app |
 
 App visibility/order for a user = global `apps.sort_order` overridden by `user_app_prefs.sort_order` and `is_hidden`. Both `index.php` and `api/apps.php` share the same merge logic (sort by `sort_order_user`, split into `$visible`/`$hidden`).
 
+`setup.php` is the single source of schema truth **and the migration runner**: in addition to `CREATE TABLE IF NOT EXISTS`, it runs guarded `ALTER TABLE` blocks (e.g. widening `glyph`, adding `is_beta` via a `SHOW COLUMNS … LIKE` check) so re-running it migrates existing installs. Add any new column both to its `CREATE TABLE` and as an idempotent `ALTER` here.
+
+`apps.is_beta` (TINYINT, default 0) flags an app as a trial; when set, a "BETA" badge is overlaid on its icon everywhere it renders (admin table, app-launcher tiles, hidden-zone chips, quick-cards).
+
 ### Admin panel
 
 `admin/_layout.php` exports two functions: `admin_head(title, currentPage, adminUser)` outputs the full HTML head + sticky nav; `admin_footer()` closes the document. Every admin page includes this file and calls both functions. Admin pages use plain PHP form-based CRUD (POST with `action` field), no React.
+
+Because `admin_head()` emits HTML, any handler that streams a file (e.g. the ZIP export) must run **before** it is called — handle such `action`s in the POST block near the top and `exit` after streaming. `_layout.php` itself only defines functions (no output on include), so it's safe to require above the export handler.
+
+### App backup (export / import ZIP)
+
+`admin/apps.php` has `export`/`import` POST actions that back up the whole app catalogue (apps.json + manifest.json + the `assets/app-icons/` files) as a ZIP. Import upserts by `slug` (`ON DUPLICATE KEY UPDATE`) inside a transaction and restores icon files (path-traversal-safe via `basename()` + an extension allowlist).
+
+ZIP I/O is **pure-PHP** in `admin/_zip.php` (`rvc_zip_create()` / `rvc_zip_read()`) — the `zip`/ZipArchive extension is **not** enabled on this install, so these build/parse the archive manually using only zlib (`gzdeflate`/`gzinflate`/`crc32`, which are available). Reading supports store (0) and deflate (8) and parses via the central directory.
 
 ### React / frontend
 
@@ -61,6 +73,8 @@ App visibility/order for a user = global `apps.sort_order` overridden by `user_a
 - Guest mode (`IS_GUEST = true`): apps shown in default sort order, no hidden zone, no drag-to-reorder, no notifications bell. The header shows a "เข้าสู่ระบบ" link instead of the avatar. `AppLauncher` renders `SimpleTile` (`<a>` elements) instead of `DragTile` when `readonly={true}`.
 - After the first render, a `useEffect` watching the `apps` state POSTs to `api/apps.php` with `action: "save_prefs"` whenever the user reorders or hides an app. A `useRef(true)` guard skips the save on the initial render; `IS_GUEST` also skips it.
 - Theme is stored in `localStorage` under key `rvc-theme` (`"light"` / `"dark"` / `"system"`). A small inline `<script>` before the CSS applies it before first paint to avoid flash.
+- The header search box (`<form role="search">`) submits to DuckDuckGo scoped to the RVC site: `https://duckduckgo.com/?q=<query> site:rvc.ac.th`, opened in a new tab. Edit `doSearch()` in the `Header` component to change the engine/scope.
+- `renderGlyph(app, size)` is the single icon renderer (image → `<img class="app-icon-img">`, `icon`+`meet` → SVG, else mono text). `image`-type `<img>`s use the `.app-icon-img` class (smooth scaling + GPU layer) — keep changes there, not inline. The `BetaBadge` component is overlaid inside each icon container (which must be `position: relative`); pass `dot` for the compact hidden-chip variant.
 
 ## Adding a new app
 
@@ -72,7 +86,7 @@ App visibility/order for a user = global `apps.sort_order` overridden by `user_a
 2. Three `glyph_type` values are supported:
    - `mono` — 1–2 character text abbreviation stored in `glyph`
    - `icon` — renders the Meet video-camera SVG when `glyph = 'meet'`
-   - `image` — uploaded image file; `glyph` stores the filename (e.g. `meet-1234567890.png`). Files live in `assets/app-icons/`. PHP execution is blocked there via `.htaccess`. On delete or type-change, the old file is removed by `delete_icon()` in `admin/apps.php`.
+   - `image` — uploaded image file; `glyph` stores the filename (e.g. `meet-1234567890.png`). Files live in `assets/app-icons/`. PHP execution is blocked there via `.htaccess`. On delete or type-change, the old file is removed by `delete_icon()` in `admin/apps.php`. The **GD extension is disabled** on this install, so uploads are stored as-is (no server-side resizing/resampling) — icon crispness depends on the source file; `.app-icon-img` only smooths client-side scaling.
 
 ## Adding a new user role or permission check
 

@@ -40,6 +40,7 @@ function admin_head(string $pageTitle, string $currentPage, array $adminUser): v
   --hover: #f0f3f8; --hover-strong: #e7ecf4; --input-bg: #f6f8fb;
   --shadow-header: 0 1px 0 rgba(20,30,55,.06);
   --shadow-card: 0 2px 16px rgba(20,30,55,.08);
+  --shadow-pop: 0 4px 28px rgba(20,30,55,.16), 0 1px 3px rgba(20,30,55,.08);
   --ring: rgba(47,91,234,.35); --glow: rgba(47,91,234,.28);
 }
 [data-theme="dark"] {
@@ -49,6 +50,7 @@ function admin_head(string $pageTitle, string $currentPage, array $adminUser): v
   --hover: #20262f; --hover-strong: #28303b; --input-bg: #20262f;
   --shadow-header: 0 1px 0 rgba(0,0,0,.5);
   --shadow-card: 0 2px 20px rgba(0,0,0,.4);
+  --shadow-pop: 0 6px 32px rgba(0,0,0,.55), 0 1px 2px rgba(0,0,0,.4);
   --ring: rgba(108,150,255,.45); --glow: rgba(108,150,255,.38);
   --brand: #6c96ff; --brand-tint: #1b2742;
 }
@@ -71,13 +73,13 @@ button, input, select, textarea { font-family: inherit; }
   opacity: .6;
 }
 .a-header-inner {
-  height: 56px; max-width: 1280px; margin: 0 auto; padding: 0 20px;
+  height: 64px; max-width: 1280px; margin: 0 auto; padding: 0 20px;
   display: flex; align-items: center; justify-content: space-between; gap: 16px;
 }
 .a-header-left { display: flex; align-items: center; gap: 20px; }
-.brand { display: flex; align-items: baseline; gap: 8px; text-decoration: none; }
-.brand-mark { font-weight: 800; font-size: 20px; letter-spacing: -.5px; color: var(--brand); }
-.brand-sub  { font-size: 12px; font-weight: 600; color: var(--text-3); }
+.brand { display: flex; align-items: baseline; gap: 9px; text-decoration: none; }
+.brand-mark { font-weight: 800; font-size: 22px; letter-spacing: -.5px; color: var(--brand); }
+.brand-sub  { font-size: 13px; font-weight: 500; color: var(--text-3); }
 
 .a-nav { display: flex; align-items: center; gap: 2px; }
 .a-nav-link {
@@ -90,7 +92,6 @@ button, input, select, textarea { font-family: inherit; }
 .a-nav-link.active { background: var(--brand-tint); color: var(--brand); }
 
 .a-header-right { display: flex; align-items: center; gap: 12px; }
-.a-username { font-size: 13.5px; font-weight: 600; color: var(--text-2); }
 .a-btn {
   display: inline-flex; align-items: center; gap: 7px;
   padding: 7px 14px; border-radius: 8px; border: none; cursor: pointer;
@@ -149,6 +150,9 @@ button, input, select, textarea { font-family: inherit; }
 [data-theme="dark"] .badge-active   { background: #14291e; color: #86efac; }
 [data-theme="dark"] .badge-inactive { background: #1f2937; color: #9ca3af; }
 
+.badge-beta { display: inline-flex; padding: 2px 7px; border-radius: 6px; font-size: 10.5px; font-weight: 800; letter-spacing: .4px; background: #fef3c7; color: #b45309; }
+[data-theme="dark"] .badge-beta { background: #3a2c10; color: #fbbf24; }
+
 .badge-admin { display: inline-flex; padding: 3px 10px; border-radius: 999px; font-size: 12.5px; font-weight: 600; background: var(--brand-tint); color: var(--brand); }
 .badge-user  { display: inline-flex; padding: 3px 10px; border-radius: 999px; font-size: 12.5px; font-weight: 600; background: #f3f4f6; color: #6b7280; }
 [data-theme="dark"] .badge-user { background: #1f2937; color: #9ca3af; }
@@ -196,6 +200,39 @@ button, input, select, textarea { font-family: inherit; }
   display: inline-flex; align-items: center; justify-content: center;
   color: #fff; font-weight: 700; font-size: 14px; flex-shrink: 0;
 }
+
+/* ── User menu (header avatar dropdown) ── */
+.a-user { position: relative; }
+.a-avatar-btn {
+  border: none; background: transparent; cursor: pointer;
+  padding: 3px; border-radius: 50%; display: inline-flex;
+  transition: box-shadow .15s;
+}
+.a-avatar-btn:hover   { box-shadow: 0 0 0 2px var(--border-strong); }
+.a-avatar-btn.is-open { box-shadow: 0 0 0 2px var(--brand); }
+.a-avatar-btn .a-avatar { width: 34px; height: 34px; font-size: 15px; }
+.a-avatar-lg { width: 48px; height: 48px; font-size: 20px; }
+.a-user-pop {
+  position: absolute; top: calc(100% + 10px); right: 0; width: 280px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 16px; box-shadow: var(--shadow-pop); padding: 8px; z-index: 200;
+}
+.a-user-pop[hidden] { display: none; }
+.a-user-head { display: flex; align-items: center; gap: 12px; padding: 12px 12px 14px; }
+.a-user-name { font-size: 15px; font-weight: 700; color: var(--text); }
+.a-user-email { font-size: 13px; color: var(--text-2); }
+.a-menu-div { height: 1px; background: var(--border); margin: 6px 4px; }
+.a-menu-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 12px; border-radius: 10px; text-decoration: none;
+  color: var(--text); font-size: 14.5px; font-weight: 500;
+  transition: background .13s;
+}
+.a-menu-row:hover { background: var(--hover); }
+.a-menu-row svg   { color: var(--text-2); width: 18px; height: 18px; flex-shrink: 0; }
+.a-menu-danger    { color: #e5484d; }
+.a-menu-danger svg { color: #e5484d; }
+.a-menu-danger:hover { background: rgba(229,72,77,.10); }
 </style>
 </head>
 <body>
@@ -215,12 +252,51 @@ button, input, select, textarea { font-family: inherit; }
       </nav>
     </div>
     <div class="a-header-right">
-      <span class="a-username"><?= e($adminUser['name']) ?></span>
       <a href="<?= e($base) ?>/index.php" class="a-btn a-btn-ghost">← กลับแอป</a>
-      <a href="<?= e($base) ?>/logout.php" class="a-btn a-btn-ghost">ออกจากระบบ</a>
+      <div class="a-user">
+        <button type="button" class="a-avatar-btn" id="a-avatar-btn"
+                aria-haspopup="true" aria-expanded="false" aria-label="บัญชีผู้ใช้">
+          <span class="a-avatar" style="background:<?= e($adminUser['avatar_color']) ?>"><?= e($adminUser['initials']) ?></span>
+        </button>
+        <div class="a-user-pop" id="a-user-pop" hidden>
+          <div class="a-user-head">
+            <span class="a-avatar a-avatar-lg" style="background:<?= e($adminUser['avatar_color']) ?>"><?= e($adminUser['initials']) ?></span>
+            <div>
+              <div class="a-user-name"><?= e($adminUser['name']) ?></div>
+              <div class="a-user-email"><?= e($adminUser['email']) ?></div>
+            </div>
+          </div>
+          <div class="a-menu-div"></div>
+          <a class="a-menu-row" href="<?= e($base) ?>/account.php">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="15.5" r="3.5"/><path d="m10 13 8.5-8.5"/><path d="m15 6 2.5 2.5"/><path d="m18 3.5 2.5 2.5"/></svg>
+            <span>เปลี่ยนรหัสผ่าน</span>
+          </a>
+          <a class="a-menu-row" href="<?= e($base) ?>/index.php">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V20h14V9.5"/><path d="M9.5 20v-6h5v6"/></svg>
+            <span>กลับสู่ Workspace</span>
+          </a>
+          <div class="a-menu-div"></div>
+          <a class="a-menu-row a-menu-danger" href="<?= e($base) ?>/logout.php">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M15 17.5 19.5 13 15 8.5"/><path d="M19.5 13H8.5"/><path d="M11 4.5H6A1.5 1.5 0 0 0 4.5 6v14A1.5 1.5 0 0 0 6 21.5h5"/></svg>
+            <span>ออกจากระบบ</span>
+          </a>
+        </div>
+      </div>
     </div>
   </div>
 </header>
+<script>
+(function(){
+  var btn = document.getElementById('a-avatar-btn');
+  var pop = document.getElementById('a-user-pop');
+  if (!btn || !pop) return;
+  function close(){ pop.hidden = true;  btn.classList.remove('is-open'); btn.setAttribute('aria-expanded','false'); }
+  function open(){  pop.hidden = false; btn.classList.add('is-open');    btn.setAttribute('aria-expanded','true');  }
+  btn.addEventListener('click', function(e){ e.stopPropagation(); pop.hidden ? open() : close(); });
+  document.addEventListener('click', function(e){ if (!pop.hidden && !pop.contains(e.target) && !btn.contains(e.target)) close(); });
+  document.addEventListener('keydown', function(e){ if (e.key === 'Escape') close(); });
+})();
+</script>
 
 <main class="a-main">
 <?php

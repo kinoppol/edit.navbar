@@ -3,6 +3,7 @@ declare(strict_types=1);
 require_once dirname(__DIR__) . '/config/db.php';
 require_once dirname(__DIR__) . '/config/auth.php';
 require_once __DIR__ . '/_layout.php';
+require_once __DIR__ . '/_zip.php';
 
 $adminUser = require_admin();
 
@@ -58,6 +59,140 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_verify();
     $action = $_POST['action'] ?? '';
 
+    // ── Export apps (+ icons) as a ZIP backup ──────────────────────────────────
+    if ($action === 'export') {
+        $rows = db()->query(
+            "SELECT slug, name, description, color, glyph_type, glyph, url, is_active, is_beta, sort_order
+             FROM apps ORDER BY sort_order, id"
+        )->fetchAll();
+
+        // Normalise types for a clean, portable JSON payload
+        $appsOut = array_map(fn($a) => [
+            'slug'        => $a['slug'],
+            'name'        => $a['name'],
+            'description' => $a['description'],
+            'color'       => $a['color'],
+            'glyph_type'  => $a['glyph_type'],
+            'glyph'       => $a['glyph'],
+            'url'         => $a['url'],
+            'is_active'   => (int) $a['is_active'],
+            'is_beta'     => (int) $a['is_beta'],
+            'sort_order'  => (int) $a['sort_order'],
+        ], $rows);
+
+        $files = [
+            'manifest.json' => json_encode([
+                'format'      => 'rvc-navbar-apps',
+                'version'     => 1,
+                'exported_at' => date('c'),
+                'count'       => count($appsOut),
+            ], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+            'apps.json' => json_encode(
+                $appsOut,
+                JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
+            ),
+        ];
+
+        // Bundle each image icon
+        foreach ($rows as $a) {
+            if ($a['glyph_type'] === 'image' && $a['glyph'] !== '') {
+                $path = ICONS_DIR . basename($a['glyph']);
+                if (is_file($path)) {
+                    $files['icons/' . basename($a['glyph'])] = (string) file_get_contents($path);
+                }
+            }
+        }
+
+        $zip   = rvc_zip_create($files);
+        $fname = 'rvc-apps-backup-' . date('Ymd-His') . '.zip';
+        header('Content-Type: application/zip');
+        header('Content-Disposition: attachment; filename="' . $fname . '"');
+        header('Content-Length: ' . strlen($zip));
+        header('Cache-Control: no-store');
+        echo $zip;
+        exit;
+    }
+
+    // ── Import apps (+ icons) from a ZIP backup ────────────────────────────────
+    if ($action === 'import') {
+        $file = $_FILES['import_zip'] ?? [];
+        if (empty($file['tmp_name']) || (int) $file['error'] !== UPLOAD_ERR_OK) {
+            $flash     = 'กรุณาเลือกไฟล์ ZIP ที่ต้องการนำเข้า';
+            $flashType = 'error';
+        } else {
+            try {
+                $entries = rvc_zip_read((string) file_get_contents($file['tmp_name']));
+                if (!isset($entries['apps.json'])) {
+                    throw new \RuntimeException('ไม่พบ apps.json ในไฟล์ ZIP');
+                }
+                $list = json_decode($entries['apps.json'], true);
+                if (!is_array($list)) {
+                    throw new \RuntimeException('ข้อมูล apps.json เสียหาย');
+                }
+                if (!is_dir(ICONS_DIR)) {
+                    mkdir(ICONS_DIR, 0755, true);
+                }
+
+                $allowedExt = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'];
+                $upsert = db()->prepare(
+                    "INSERT INTO apps (slug,name,description,color,glyph_type,glyph,url,is_active,is_beta,sort_order)
+                     VALUES (?,?,?,?,?,?,?,?,?,?)
+                     ON DUPLICATE KEY UPDATE
+                        name=VALUES(name), description=VALUES(description), color=VALUES(color),
+                        glyph_type=VALUES(glyph_type), glyph=VALUES(glyph), url=VALUES(url),
+                        is_active=VALUES(is_active), is_beta=VALUES(is_beta),
+                        sort_order=VALUES(sort_order), updated_at=NOW()"
+                );
+
+                $imported = 0;
+                db()->beginTransaction();
+                foreach ($list as $a) {
+                    if (!is_array($a)) continue;
+                    $slug = preg_replace('/[^a-z0-9_-]/', '', strtolower((string) ($a['slug'] ?? '')));
+                    if ($slug === '') continue;
+
+                    $glyphType = in_array($a['glyph_type'] ?? 'mono', ['icon', 'mono', 'image'], true)
+                        ? $a['glyph_type'] : 'mono';
+                    $glyph = (string) ($a['glyph'] ?? '');
+
+                    // Restore bundled icon file (path-traversal safe: basename + extension allowlist)
+                    if ($glyphType === 'image' && $glyph !== '') {
+                        $safe = basename($glyph);
+                        $ext  = strtolower(pathinfo($safe, PATHINFO_EXTENSION));
+                        if (isset($entries['icons/' . $safe]) && in_array($ext, $allowedExt, true)) {
+                            file_put_contents(ICONS_DIR . $safe, $entries['icons/' . $safe]);
+                            $glyph = $safe;
+                        }
+                    }
+                    if ($glyph === '') $glyph = '?';
+
+                    $color = (string) ($a['color'] ?? '#2F5BEA');
+                    if (!preg_match('/^#[0-9a-fA-F]{3,8}$/', $color)) $color = '#2F5BEA';
+
+                    $upsert->execute([
+                        $slug,
+                        trim((string) ($a['name'] ?? $slug)),
+                        trim((string) ($a['description'] ?? '')),
+                        $color,
+                        $glyphType,
+                        $glyph,
+                        trim((string) ($a['url'] ?? '#')),
+                        !empty($a['is_active']) ? 1 : 0,
+                        !empty($a['is_beta'])   ? 1 : 0,
+                        (int) ($a['sort_order'] ?? 0),
+                    ]);
+                    $imported++;
+                }
+                db()->commit();
+                $flash = "นำเข้าสำเร็จ {$imported} แอปพลิเคชัน (แอปที่ slug ซ้ำจะถูกอัปเดต)";
+            } catch (\Throwable $ex) {
+                if (db()->inTransaction()) db()->rollBack();
+                $flash     = 'นำเข้าไม่สำเร็จ: ' . e($ex->getMessage());
+                $flashType = 'error';
+            }
+        }
+    }
+
     // ── Delete ────────────────────────────────────────────────────────────────
     if ($action === 'delete') {
         $id = (int) ($_POST['id'] ?? 0);
@@ -90,6 +225,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $glyphType = in_array($_POST['glyph_type'] ?? '', ['icon', 'mono', 'image']) ? $_POST['glyph_type'] : 'mono';
         $url       = trim($_POST['url']         ?? '#');
         $isActive  = isset($_POST['is_active']) ? 1 : 0;
+        $isBeta    = isset($_POST['is_beta'])   ? 1 : 0;
         $sortOrder = (int) ($_POST['sort_order'] ?? 0);
 
         if (!preg_match('/^#[0-9a-fA-F]{3,8}$/', $color)) $color = '#2F5BEA';
@@ -143,24 +279,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (empty($errors)) {
             try {
                 if ($action === 'create') {
-                    db()->prepare("INSERT INTO apps (slug,name,description,color,glyph_type,glyph,url,is_active,sort_order)
-                                   VALUES (?,?,?,?,?,?,?,?,?)")
-                        ->execute([$slug,$name,$desc,$color,$glyphType,$glyph,$url,$isActive,$sortOrder]);
+                    db()->prepare("INSERT INTO apps (slug,name,description,color,glyph_type,glyph,url,is_active,is_beta,sort_order)
+                                   VALUES (?,?,?,?,?,?,?,?,?,?)")
+                        ->execute([$slug,$name,$desc,$color,$glyphType,$glyph,$url,$isActive,$isBeta,$sortOrder]);
                     $flash = 'เพิ่มแอปพลิเคชันเรียบร้อยแล้ว';
                 } else {
-                    db()->prepare("UPDATE apps SET slug=?,name=?,description=?,color=?,glyph_type=?,glyph=?,url=?,is_active=?,sort_order=?,updated_at=NOW() WHERE id=?")
-                        ->execute([$slug,$name,$desc,$color,$glyphType,$glyph,$url,$isActive,$sortOrder,$id]);
+                    db()->prepare("UPDATE apps SET slug=?,name=?,description=?,color=?,glyph_type=?,glyph=?,url=?,is_active=?,is_beta=?,sort_order=?,updated_at=NOW() WHERE id=?")
+                        ->execute([$slug,$name,$desc,$color,$glyphType,$glyph,$url,$isActive,$isBeta,$sortOrder,$id]);
                     $flash = 'อัปเดตแอปพลิเคชันเรียบร้อยแล้ว';
                 }
             } catch (\PDOException $e) {
                 $flash     = 'Slug "' . e($slug) . '" ถูกใช้งานแล้ว กรุณาใช้ slug อื่น';
                 $flashType = 'error';
-                $editing   = compact('id','slug','name','desc','color','glyphType','glyph','url','isActive','sortOrder');
+                $editing   = compact('id','slug','name','desc','color','glyphType','glyph','url','isActive','isBeta','sortOrder');
             }
         } else {
             $flash     = implode(' / ', $errors);
             $flashType = 'error';
-            $editing   = compact('id','slug','name','desc','color','glyphType','glyph','url','isActive','sortOrder');
+            $editing   = compact('id','slug','name','desc','color','glyphType','glyph','url','isActive','isBeta','sortOrder');
         }
     }
 }
@@ -182,6 +318,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['edit'])) {
             'glyph'     => $row['glyph'],
             'url'       => $row['url'],
             'isActive'  => (int) $row['is_active'],
+            'isBeta'    => (int) $row['is_beta'],
             'sortOrder' => (int) $row['sort_order'],
         ];
     }
@@ -212,6 +349,52 @@ $curGlyph   = $editing['glyph']     ?? '';
 
 <?php if ($flash !== ''): ?>
   <div class="a-alert a-alert-<?= $flashType ?>"><?= $flash ?></div>
+<?php endif; ?>
+
+<?php if (!$showForm): ?>
+<!-- ── Backup: export / import ────────────────────────────────────────────── -->
+<div class="a-card a-backup">
+  <div class="a-backup-info">
+    <div class="a-backup-title">สำรอง &amp; กู้คืนรายการแอป</div>
+    <div class="a-backup-sub">ส่งออกรายการแอปพลิเคชันทั้งหมดพร้อมไอคอนเป็นไฟล์ ZIP หรือนำเข้าจากไฟล์สำรอง</div>
+  </div>
+  <div class="a-backup-actions">
+    <form method="POST" style="display:inline">
+      <input type="hidden" name="_csrf"  value="<?= e($csrf) ?>">
+      <input type="hidden" name="action" value="export">
+      <button type="submit" class="a-btn a-btn-ghost">⤓ ส่งออก ZIP</button>
+    </form>
+    <form method="POST" enctype="multipart/form-data" id="import-form" style="display:inline">
+      <input type="hidden" name="_csrf"  value="<?= e($csrf) ?>">
+      <input type="hidden" name="action" value="import">
+      <input type="file" name="import_zip" id="import-file" accept=".zip,application/zip"
+             style="display:none" onchange="confirmImport(this)">
+      <button type="button" class="a-btn a-btn-primary"
+              onclick="document.getElementById('import-file').click()">⤒ นำเข้า ZIP</button>
+    </form>
+  </div>
+</div>
+
+<style>
+.a-backup {
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  flex-wrap: wrap; margin-bottom: 16px; padding: 18px 20px;
+}
+.a-backup-title { font-size: 15px; font-weight: 700; color: var(--text); }
+.a-backup-sub   { font-size: 13px; color: var(--text-3); margin-top: 3px; max-width: 540px; }
+.a-backup-actions { display: flex; gap: 8px; flex-shrink: 0; }
+</style>
+
+<script>
+function confirmImport(input) {
+  if (!input.files || !input.files[0]) return;
+  if (confirm('นำเข้าจากไฟล์ "' + input.files[0].name + '"?\n\nแอปที่มี slug ตรงกันจะถูกอัปเดตด้วยข้อมูลจากไฟล์สำรอง')) {
+    document.getElementById('import-form').submit();
+  } else {
+    input.value = '';
+  }
+}
+</script>
 <?php endif; ?>
 
 <?php if ($showForm): ?>
@@ -335,6 +518,15 @@ $curGlyph   = $editing['glyph']     ?? '';
       </label>
     </div>
 
+    <div class="a-field">
+      <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:14px;font-weight:600;color:var(--text-2)">
+        <input type="checkbox" name="is_beta" value="1"
+               <?= ($editing['isBeta'] ?? 0) ? 'checked' : '' ?>>
+        เวอร์ชันทดลอง (แสดงป้าย Beta บนไอคอน)
+      </label>
+      <p class="a-hint">เปิดเพื่อแจ้งผู้ใช้ว่าแอปนี้อยู่ในช่วงทดลองใช้งาน</p>
+    </div>
+
     <div class="a-form-actions">
       <button type="submit" class="a-btn a-btn-primary">
         <?= $isEditing ? 'บันทึกการเปลี่ยนแปลง' : 'เพิ่มแอปพลิเคชัน' ?>
@@ -419,6 +611,9 @@ function handleDrop(e) {
               </span>
             <?php endif; ?>
             <strong><?= e($app['name']) ?></strong>
+            <?php if (!empty($app['is_beta'])): ?>
+              <span class="badge-beta">BETA</span>
+            <?php endif; ?>
           </div>
         </td>
         <td><code style="font-size:13px;background:var(--surface-2);padding:2px 7px;border-radius:5px"><?= e($app['slug']) ?></code></td>

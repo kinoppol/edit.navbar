@@ -10,7 +10,7 @@ $uid      = $isGuest ? 0 : $authUser['id'];
 
 // ── Fetch active apps ordered by sort_order ──────────────────────────────────
 $appsRaw = db()
-    ->query("SELECT id, slug, name, description, color, glyph_type, glyph, url
+    ->query("SELECT id, slug, name, description, color, glyph_type, glyph, url, is_beta
              FROM apps WHERE is_active = 1 ORDER BY sort_order, id")
     ->fetchAll();
 
@@ -83,6 +83,7 @@ $jsApps = array_map(fn($a) => [
     'glyphType' => $a['glyph_type'],
     'glyph'     => $a['glyph'],
     'url'       => $a['url'],
+    'isBeta'    => (bool) (int) $a['is_beta'],
 ], $appsRaw);
 
 $jsNotifs = array_map(fn($n) => [
@@ -188,6 +189,7 @@ const Icon = {
   home:      (p) => (<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...p}><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V20h14V9.5"/><path d="M9.5 20v-6h5v6"/></svg>),
   user:      (p) => (<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" {...p}><circle cx="12" cy="8" r="3.6"/><path d="M5 19.5a7 7 0 0 1 14 0"/></svg>),
   settings:  (p) => (<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" {...p}><circle cx="12" cy="12" r="3"/><path d="M19.4 13.5a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-2.7 1.1V21a2 2 0 1 1-4 0v-.1a1.6 1.6 0 0 0-1-1.5 1.6 1.6 0 0 0-1.8.3l-.1.1A2 2 0 1 1 3.6 17l.1-.1a1.6 1.6 0 0 0-1.1-2.7H2a2 2 0 1 1 0-4h.1a1.6 1.6 0 0 0 1.5-1 1.6 1.6 0 0 0-.3-1.8l-.1-.1A2 2 0 1 1 6 3.6l.1.1a1.6 1.6 0 0 0 1.8.3H8a1.6 1.6 0 0 0 1-1.5V2a2 2 0 1 1 4 0v.1a1.6 1.6 0 0 0 1 1.5 1.6 1.6 0 0 0 1.8-.3l.1-.1A2 2 0 1 1 20.4 6l-.1.1a1.6 1.6 0 0 0-.3 1.8V8a1.6 1.6 0 0 0 1.5 1H22a2 2 0 1 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1z"/></svg>),
+  key:       (p) => (<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" {...p}><circle cx="7.5" cy="15.5" r="3.5"/><path d="m10 13 8.5-8.5"/><path d="m15 6 2.5 2.5"/><path d="m18 3.5 2.5 2.5"/></svg>),
   adminPanel:(p) => (<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" {...p}><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>),
   logout:    (p) => (<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" {...p}><path d="M15 17.5 19.5 13 15 8.5"/><path d="M19.5 13H8.5"/><path d="M11 4.5H6A1.5 1.5 0 0 0 4.5 6v14A1.5 1.5 0 0 0 6 21.5h5"/></svg>),
   check:     (p) => (<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" {...p}><path d="m5 12.5 4.5 4.5L19 7"/></svg>),
@@ -203,10 +205,10 @@ function renderGlyph(app, size) {
   if (app.glyphType === 'image' && app.glyph) {
     return (
       <img
+        className="app-icon-img"
         src={`${BASE}/assets/app-icons/${encodeURIComponent(app.glyph)}`}
         alt={app.name}
-        style={{ width: '100%', height: '100%', objectFit: 'cover',
-                 display: 'block', borderRadius: 'inherit', pointerEvents: 'none' }}
+        loading="lazy" decoding="async" draggable={false}
       />
     );
   }
@@ -214,6 +216,14 @@ function renderGlyph(app, size) {
     return <Icon.meet style={{ color: '#fff', width: size, height: size }} />;
   }
   return <span className="app-tile-mono">{app.glyph}</span>;
+}
+
+// Beta badge — overlaid on an app icon to flag a trial app.
+// `dot` renders a compact marker for small icons (hidden-zone chips).
+function BetaBadge({ dot }) {
+  return dot
+    ? <span className="beta-dot" title="เวอร์ชันทดลอง (Beta)" />
+    : <span className="beta-badge">BETA</span>;
 }
 
 // ── Drag tiles ────────────────────────────────────────────────────────────────
@@ -226,7 +236,10 @@ function DragTile({ app, dragging, onStart, onEnd, onDropBefore }) {
          onDragOver={e => e.preventDefault()}
          onDrop={e => { e.preventDefault(); e.stopPropagation(); onDropBefore(app.slug); }}
          title={app.name}>
-      <span className="app-tile-icon" style={{ background: app.color }}>{renderGlyph(app, 22)}</span>
+      <span className="app-tile-icon" style={{ background: app.color }}>
+        {renderGlyph(app, 22)}
+        {app.isBeta && <BetaBadge />}
+      </span>
       <span className="app-tile-name">{app.name}</span>
     </div>
   );
@@ -241,7 +254,10 @@ function DragChip({ app, dragging, onStart, onEnd, onDropBefore }) {
          onDragOver={e => e.preventDefault()}
          onDrop={e => { e.preventDefault(); e.stopPropagation(); onDropBefore(app.slug); }}
          title={app.name}>
-      <span className="hidden-chip-icon" style={{ background: app.color }}>{renderGlyph(app, 13)}</span>
+      <span className="hidden-chip-icon" style={{ background: app.color }}>
+        {renderGlyph(app, 13)}
+        {app.isBeta && <BetaBadge dot />}
+      </span>
       <span className="hidden-chip-name">{app.name}</span>
     </div>
   );
@@ -255,7 +271,10 @@ function SimpleTile({ app }) {
        target={app.url && app.url !== '#' ? '_blank' : undefined}
        rel="noopener noreferrer" title={app.name}
        style={{ textDecoration: 'none' }}>
-      <span className="app-tile-icon" style={{ background: app.color }}>{renderGlyph(app, 22)}</span>
+      <span className="app-tile-icon" style={{ background: app.color }}>
+        {renderGlyph(app, 22)}
+        {app.isBeta && <BetaBadge />}
+      </span>
       <span className="app-tile-name">{app.name}</span>
     </a>
   );
@@ -353,6 +372,14 @@ function Header({ theme, setTheme, onHide, appsVisible, appsHidden, moveApp,
 
   const toggle = m => setOpenMenu(prev => prev === m ? null : m);
 
+  // Search via DuckDuckGo, restricted to the rvc.ac.th domain.
+  const doSearch = () => {
+    const q = query.trim();
+    if (!q) { if (searchInput.current) searchInput.current.focus(); return; }
+    const url = "https://duckduckgo.com/?q=" + encodeURIComponent(q + " site:rvc.ac.th");
+    window.open(url, "_blank", "noopener");
+  };
+
   useEffect(() => { if (searchOpen && searchInput.current) searchInput.current.focus(); }, [searchOpen]);
 
   useEffect(() => {
@@ -397,20 +424,22 @@ function Header({ theme, setTheme, onHide, appsVisible, appsHidden, moveApp,
         <div className="header-right">
 
           {/* SEARCH */}
-          <div className={"search " + (searchOpen ? "open" : "")} ref={searchRef}>
-            <button className="icon-btn search-trigger" aria-label="ค้นหา" onClick={() => setSearchOpen(true)}>
+          <form className={"search " + (searchOpen ? "open" : "")} ref={searchRef}
+                role="search" onSubmit={e => { e.preventDefault(); doSearch(); }}>
+            <button type="button" className="icon-btn search-trigger" aria-label="ค้นหา"
+                    onClick={() => { if (searchOpen) doSearch(); else setSearchOpen(true); }}>
               <Icon.search />
             </button>
-            <input ref={searchInput} className="search-input"
-                   placeholder="ค้นหาในแอป RVC, คน, ไฟล์…"
+            <input ref={searchInput} className="search-input" type="text" enterKeyHint="search"
+                   placeholder="ค้นหาในเว็บไซต์ RVC (rvc.ac.th)…"
                    value={query} onChange={e => setQuery(e.target.value)} />
             {searchOpen && (
-              <button className="icon-btn search-clear" aria-label="ปิด"
+              <button type="button" className="icon-btn search-clear" aria-label="ปิด"
                       onClick={() => { setQuery(""); setSearchOpen(false); }}>
                 <Icon.close width="18" height="18" />
               </button>
             )}
-          </div>
+          </form>
 
           {/* THEME */}
           <div className="popover-host">
@@ -496,7 +525,10 @@ function Header({ theme, setTheme, onHide, appsVisible, appsHidden, moveApp,
                 </div>
                 <div className="menu-section">
                   <button className="menu-row"><span className="menu-ico"><Icon.user /></span><span className="menu-label">โปรไฟล์</span></button>
-                  <button className="menu-row"><span className="menu-ico"><Icon.settings /></span><span className="menu-label">การตั้งค่า</span></button>
+                  <a className="menu-row" href={BASE + "/account.php"} style={{textDecoration:'none'}}>
+                    <span className="menu-ico"><Icon.key /></span>
+                    <span className="menu-label">เปลี่ยนรหัสผ่าน</span>
+                  </a>
                 </div>
                 <div className="menu-divider" />
                 {IS_ADMIN && (
@@ -557,9 +589,14 @@ function DemoPage({ visibleSlugs }) {
                  rel="noopener noreferrer">
                 <span className="quick-icon" style={{ background: a.color }}>
                   {renderGlyph(a, 26)}
+                  {a.isBeta && <BetaBadge />}
                 </span>
                 <span className="quick-meta">
-                  <span className="quick-name">{a.name} <Icon.external className="quick-ext" /></span>
+                  <span className="quick-name">
+                    {a.name}
+                    {a.isBeta && <span className="quick-beta-tag">Beta</span>}
+                    <Icon.external className="quick-ext" />
+                  </span>
                   <span className="quick-desc">{a.desc}</span>
                 </span>
               </a>
@@ -823,9 +860,18 @@ a.app-tile { cursor: pointer; }
 .app-tile:active   { cursor: grabbing; }
 .app-tile.dragging { opacity: .35; transform: scale(.94); }
 .app-tile-icon {
+  position: relative;
   width: 46px; height: 46px; border-radius: 14px; pointer-events: none;
   display: flex; align-items: center; justify-content: center;
   box-shadow: 0 2px 8px rgba(20,30,55,.14);
+}
+.app-icon-img {
+  width: 100%; height: 100%; display: block;
+  object-fit: cover; border-radius: inherit; pointer-events: none;
+  image-rendering: auto;          /* smooth bilinear/bicubic scaling */
+  -ms-interpolation-mode: bicubic;/* legacy fallback */
+  -webkit-backface-visibility: hidden; backface-visibility: hidden;
+  transform: translateZ(0);       /* GPU path → cleaner subpixel edges */
 }
 .app-tile-mono { color: #fff; font-weight: 800; font-size: 17px; letter-spacing: -.3px; }
 .app-tile-name { font-size: 12.5px; font-weight: 600; color: var(--text); pointer-events: none; }
@@ -847,7 +893,7 @@ a.app-tile { cursor: pointer; }
 .hidden-chip:hover    { box-shadow: 0 2px 8px rgba(20,30,55,.10); }
 .hidden-chip:active   { cursor: grabbing; }
 .hidden-chip.dragging { opacity: .35; transform: scale(.94); }
-.hidden-chip-icon { width: 24px; height: 24px; border-radius: 7px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; pointer-events: none; }
+.hidden-chip-icon { position: relative; width: 24px; height: 24px; border-radius: 7px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; pointer-events: none; }
 .hidden-chip-icon .app-tile-mono { font-size: 11px; }
 .hidden-chip-name { font-size: 12.5px; font-weight: 600; color: var(--text-2); pointer-events: none; }
 
@@ -893,12 +939,36 @@ a.app-tile { cursor: pointer; }
   transition: transform .15s, box-shadow .15s, border-color .15s;
 }
 .quick-card:hover { transform: translateY(-2px); box-shadow: 0 10px 26px rgba(20,30,55,.10); border-color: var(--border-strong); }
-.quick-icon { width: 50px; height: 50px; border-radius: 15px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; box-shadow: 0 3px 10px rgba(20,30,55,.16); }
+.quick-icon { position: relative; width: 50px; height: 50px; border-radius: 15px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; box-shadow: 0 3px 10px rgba(20,30,55,.16); }
 .quick-icon .app-tile-mono { font-size: 18px; }
 .quick-meta { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
 .quick-name { display: flex; align-items: center; gap: 6px; font-size: 16px; font-weight: 700; color: var(--text); }
 .quick-ext  { color: var(--text-3); }
 .quick-desc { font-size: 13.5px; color: var(--text-2); }
+
+/* ── Beta marker ────────────────────────────────────────────────────────── */
+.beta-badge {
+  position: absolute; top: -6px; right: -8px;
+  padding: 1px 5px; border-radius: 6px;
+  background: #f59e0b; color: #fff;
+  font-size: 9px; font-weight: 800; letter-spacing: .4px; line-height: 1.5;
+  border: 2px solid var(--surface);
+  box-shadow: 0 1px 4px rgba(20,30,55,.25);
+  pointer-events: none; text-transform: uppercase;
+}
+.beta-dot {
+  position: absolute; top: -3px; right: -3px;
+  width: 11px; height: 11px; border-radius: 50%;
+  background: #f59e0b; border: 2px solid var(--surface);
+  pointer-events: none;
+}
+.quick-beta-tag {
+  padding: 1px 6px; border-radius: 5px;
+  background: #fef3c7; color: #b45309;
+  font-size: 10.5px; font-weight: 800; letter-spacing: .3px;
+  text-transform: uppercase;
+}
+[data-theme="dark"] .quick-beta-tag { background: #3a2c10; color: #fbbf24; }
 </style>
 </body>
 </html>

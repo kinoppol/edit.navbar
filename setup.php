@@ -70,6 +70,7 @@ try {
         glyph       VARCHAR(255)    NOT NULL DEFAULT '?',
         url         VARCHAR(500)    NOT NULL DEFAULT '#',
         is_active   TINYINT(1)      NOT NULL DEFAULT 1,
+        is_beta     TINYINT(1)      NOT NULL DEFAULT 0,
         sort_order  INT             NOT NULL DEFAULT 0,
         created_at  TIMESTAMP       NOT NULL DEFAULT CURRENT_TIMESTAMP,
         updated_at  TIMESTAMP       NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -83,6 +84,13 @@ try {
         MODIFY COLUMN glyph_type ENUM('icon','mono','image') NOT NULL DEFAULT 'mono',
         MODIFY COLUMN glyph      VARCHAR(255) NOT NULL DEFAULT '?'");
     logLine("✅ Schema migration: glyph supports images");
+
+    // Migration for existing installs: add is_beta flag
+    $hasBeta = $pdo->query("SHOW COLUMNS FROM apps LIKE 'is_beta'")->fetch();
+    if (!$hasBeta) {
+        $pdo->exec("ALTER TABLE apps ADD COLUMN is_beta TINYINT(1) NOT NULL DEFAULT 0 AFTER is_active");
+    }
+    logLine("✅ Schema migration: apps support beta flag");
 
     // --------------------------------------------------------- user_app_prefs
     $pdo->exec("CREATE TABLE IF NOT EXISTS user_app_prefs (
