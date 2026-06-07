@@ -18,7 +18,7 @@ Default credentials after setup:
 
 ## Database configuration
 
-All DB constants (`DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASS`) are defined at the top of `config/db.php`. Change them there before running setup.
+`config/db.php` defines the `DB_*` constants from a settings array: hardcoded defaults (localhost / root / no password, for dev) **overridden by `config/db.local.php`** if that file exists (`require`d as an array and `array_merge`d). For a real server, don't edit `db.php` — open `setup.php` in a browser and fill in the connection form; on success it writes `config/db.local.php` (via `var_export`) and runs the schema migrations + seed. `config/db.local.php` holds credentials and is **git-ignored**; if the web user can't write it, `setup.php` prints the file contents to paste manually. `setup.php` only acts on POST (the form) and should be removed/locked down on production.
 
 `APP_BASE` is computed automatically from `$_SERVER['DOCUMENT_ROOT']` and `__DIR__` — it becomes `/edit.navbar` on a standard WampServer install. All PHP redirects and HTML links use `APP_BASE` as a prefix.
 

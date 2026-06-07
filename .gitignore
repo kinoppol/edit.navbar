@@ -1,0 +1,2 @@
+# Local DB connection overrides written by setup.php — contains credentials
+/config/db.local.php

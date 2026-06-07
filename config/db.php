@@ -1,11 +1,30 @@
 <?php
 declare(strict_types=1);
 
-define('DB_HOST', 'localhost');
-define('DB_PORT', 3306);
-define('DB_NAME', 'rvc_navbar');
-define('DB_USER', 'root');
-define('DB_PASS', '');
+// Connection settings. The defaults below suit a local WampServer/XAMPP dev box.
+// On a real server, run setup.php and fill in the form — it writes the values to
+// config/db.local.php (git-ignored), which overrides these defaults here.
+(function (): void {
+    $cfg = [
+        'host' => 'localhost',
+        'port' => 3306,
+        'name' => 'rvc_navbar',
+        'user' => 'root',
+        'pass' => '',
+    ];
+    $localCfg = __DIR__ . '/db.local.php';
+    if (is_file($localCfg)) {
+        $override = require $localCfg;
+        if (is_array($override)) {
+            $cfg = array_merge($cfg, $override);
+        }
+    }
+    define('DB_HOST', (string) $cfg['host']);
+    define('DB_PORT', (int)    $cfg['port']);
+    define('DB_NAME', (string) $cfg['name']);
+    define('DB_USER', (string) $cfg['user']);
+    define('DB_PASS', (string) $cfg['pass']);
+})();
 
 // Derive web base path from document root (works on WampServer / Apache)
 (function (): void {
