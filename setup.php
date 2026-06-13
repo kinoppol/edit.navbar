@@ -112,6 +112,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 url         VARCHAR(500)    NOT NULL DEFAULT '#',
                 is_active   TINYINT(1)      NOT NULL DEFAULT 1,
                 is_beta     TINYINT(1)      NOT NULL DEFAULT 0,
+                is_ai       TINYINT(1)      NOT NULL DEFAULT 0,
                 sort_order  INT             NOT NULL DEFAULT 0,
                 created_at  TIMESTAMP       NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 updated_at  TIMESTAMP       NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -132,6 +133,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $pdo->exec("ALTER TABLE apps ADD COLUMN is_beta TINYINT(1) NOT NULL DEFAULT 0 AFTER is_active");
             }
             logLine('✅ Schema migration: apps support beta flag');
+
+            // Migration for existing installs: add is_ai flag
+            $hasAi = $pdo->query("SHOW COLUMNS FROM apps LIKE 'is_ai'")->fetch();
+            if (!$hasAi) {
+                $pdo->exec("ALTER TABLE apps ADD COLUMN is_ai TINYINT(1) NOT NULL DEFAULT 0 AFTER is_beta");
+            }
+            logLine('✅ Schema migration: apps support AI flag');
 
             // ------------------------------------------------- user_app_prefs
             $pdo->exec("CREATE TABLE IF NOT EXISTS user_app_prefs (

@@ -152,6 +152,8 @@ button, input, select, textarea { font-family: inherit; }
 
 .badge-beta { display: inline-flex; padding: 2px 7px; border-radius: 6px; font-size: 10.5px; font-weight: 800; letter-spacing: .4px; background: #fef3c7; color: #b45309; }
 [data-theme="dark"] .badge-beta { background: #3a2c10; color: #fbbf24; }
+.badge-ai { display: inline-flex; padding: 2px 7px; border-radius: 6px; font-size: 10.5px; font-weight: 800; letter-spacing: .4px; background: #ede9fe; color: #6d28d9; }
+[data-theme="dark"] .badge-ai { background: #2e1a5e; color: #a78bfa; }
 
 .badge-admin { display: inline-flex; padding: 3px 10px; border-radius: 999px; font-size: 12.5px; font-weight: 600; background: var(--brand-tint); color: var(--brand); }
 .badge-user  { display: inline-flex; padding: 3px 10px; border-radius: 999px; font-size: 12.5px; font-weight: 600; background: #f3f4f6; color: #6b7280; }

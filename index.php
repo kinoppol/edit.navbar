@@ -10,7 +10,7 @@ $uid      = $isGuest ? 0 : $authUser['id'];
 
 // ── Fetch active apps ordered by sort_order ──────────────────────────────────
 $appsRaw = db()
-    ->query("SELECT id, slug, name, description, color, glyph_type, glyph, url, is_beta
+    ->query("SELECT id, slug, name, description, color, glyph_type, glyph, url, is_beta, is_ai
              FROM apps WHERE is_active = 1 ORDER BY sort_order, id")
     ->fetchAll();
 
@@ -84,6 +84,7 @@ $jsApps = array_map(fn($a) => [
     'glyph'     => $a['glyph'],
     'url'       => $a['url'],
     'isBeta'    => (bool) (int) $a['is_beta'],
+    'isAi'      => (bool) (int) $a['is_ai'],
 ], $appsRaw);
 
 $jsNotifs = array_map(fn($n) => [
@@ -226,6 +227,12 @@ function BetaBadge({ dot }) {
     : <span className="beta-badge">BETA</span>;
 }
 
+function AiBadge({ dot }) {
+  return dot
+    ? <span className="ai-dot" title="สร้างด้วย AI" />
+    : <span className="ai-badge">★ AI</span>;
+}
+
 // ── Drag tiles ────────────────────────────────────────────────────────────────
 function DragTile({ app, dragging, onStart, onEnd, onDropBefore }) {
   return (
@@ -239,6 +246,7 @@ function DragTile({ app, dragging, onStart, onEnd, onDropBefore }) {
       <span className="app-tile-icon" style={{ background: app.color }}>
         {renderGlyph(app, 22)}
         {app.isBeta && <BetaBadge />}
+        {app.isAi && <AiBadge />}
       </span>
       <span className="app-tile-name">{app.name}</span>
     </div>
@@ -257,6 +265,7 @@ function DragChip({ app, dragging, onStart, onEnd, onDropBefore }) {
       <span className="hidden-chip-icon" style={{ background: app.color }}>
         {renderGlyph(app, 13)}
         {app.isBeta && <BetaBadge dot />}
+        {app.isAi && <AiBadge dot />}
       </span>
       <span className="hidden-chip-name">{app.name}</span>
     </div>
@@ -274,6 +283,7 @@ function SimpleTile({ app }) {
       <span className="app-tile-icon" style={{ background: app.color }}>
         {renderGlyph(app, 22)}
         {app.isBeta && <BetaBadge />}
+        {app.isAi && <AiBadge />}
       </span>
       <span className="app-tile-name">{app.name}</span>
     </a>
@@ -590,11 +600,13 @@ function DemoPage({ visibleSlugs }) {
                 <span className="quick-icon" style={{ background: a.color }}>
                   {renderGlyph(a, 26)}
                   {a.isBeta && <BetaBadge />}
+                  {a.isAi && <AiBadge />}
                 </span>
                 <span className="quick-meta">
                   <span className="quick-name">
                     {a.name}
                     {a.isBeta && <span className="quick-beta-tag">Beta</span>}
+                    {a.isAi && <span className="quick-ai-tag">★ AI</span>}
                     <Icon.external className="quick-ext" />
                   </span>
                   <span className="quick-desc">{a.desc}</span>
@@ -969,6 +981,29 @@ a.app-tile { cursor: pointer; }
   text-transform: uppercase;
 }
 [data-theme="dark"] .quick-beta-tag { background: #3a2c10; color: #fbbf24; }
+
+/* ── AI marker ──────────────────────────────────────────────────────────── */
+.ai-badge {
+  position: absolute; top: -6px; left: -8px;
+  padding: 1px 5px; border-radius: 6px;
+  background: #7c3aed; color: #fff;
+  font-size: 9px; font-weight: 800; letter-spacing: .4px; line-height: 1.5;
+  border: 2px solid var(--surface);
+  box-shadow: 0 1px 4px rgba(20,30,55,.25);
+  pointer-events: none;
+}
+.ai-dot {
+  position: absolute; top: -3px; left: -3px;
+  width: 11px; height: 11px; border-radius: 50%;
+  background: #7c3aed; border: 2px solid var(--surface);
+  pointer-events: none;
+}
+.quick-ai-tag {
+  padding: 1px 6px; border-radius: 5px;
+  background: #ede9fe; color: #6d28d9;
+  font-size: 10.5px; font-weight: 800; letter-spacing: .3px;
+}
+[data-theme="dark"] .quick-ai-tag { background: #2e1a5e; color: #a78bfa; }
 </style>
 </body>
 </html>

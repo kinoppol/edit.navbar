@@ -62,7 +62,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // ── Export apps (+ icons) as a ZIP backup ──────────────────────────────────
     if ($action === 'export') {
         $rows = db()->query(
-            "SELECT slug, name, description, color, glyph_type, glyph, url, is_active, is_beta, sort_order
+            "SELECT slug, name, description, color, glyph_type, glyph, url, is_active, is_beta, is_ai, sort_order
              FROM apps ORDER BY sort_order, id"
         )->fetchAll();
 
@@ -77,6 +77,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'url'         => $a['url'],
             'is_active'   => (int) $a['is_active'],
             'is_beta'     => (int) $a['is_beta'],
+            'is_ai'       => (int) $a['is_ai'],
             'sort_order'  => (int) $a['sort_order'],
         ], $rows);
 
@@ -135,12 +136,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 $allowedExt = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'];
                 $upsert = db()->prepare(
-                    "INSERT INTO apps (slug,name,description,color,glyph_type,glyph,url,is_active,is_beta,sort_order)
-                     VALUES (?,?,?,?,?,?,?,?,?,?)
+                    "INSERT INTO apps (slug,name,description,color,glyph_type,glyph,url,is_active,is_beta,is_ai,sort_order)
+                     VALUES (?,?,?,?,?,?,?,?,?,?,?)
                      ON DUPLICATE KEY UPDATE
                         name=VALUES(name), description=VALUES(description), color=VALUES(color),
                         glyph_type=VALUES(glyph_type), glyph=VALUES(glyph), url=VALUES(url),
-                        is_active=VALUES(is_active), is_beta=VALUES(is_beta),
+                        is_active=VALUES(is_active), is_beta=VALUES(is_beta), is_ai=VALUES(is_ai),
                         sort_order=VALUES(sort_order), updated_at=NOW()"
                 );
 
@@ -179,6 +180,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         trim((string) ($a['url'] ?? '#')),
                         !empty($a['is_active']) ? 1 : 0,
                         !empty($a['is_beta'])   ? 1 : 0,
+                        !empty($a['is_ai'])     ? 1 : 0,
                         (int) ($a['sort_order'] ?? 0),
                     ]);
                     $imported++;
@@ -226,6 +228,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $url       = trim($_POST['url']         ?? '#');
         $isActive  = isset($_POST['is_active']) ? 1 : 0;
         $isBeta    = isset($_POST['is_beta'])   ? 1 : 0;
+        $isAi      = isset($_POST['is_ai'])     ? 1 : 0;
         $sortOrder = (int) ($_POST['sort_order'] ?? 0);
 
         if (!preg_match('/^#[0-9a-fA-F]{3,8}$/', $color)) $color = '#2F5BEA';
@@ -279,24 +282,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (empty($errors)) {
             try {
                 if ($action === 'create') {
-                    db()->prepare("INSERT INTO apps (slug,name,description,color,glyph_type,glyph,url,is_active,is_beta,sort_order)
-                                   VALUES (?,?,?,?,?,?,?,?,?,?)")
-                        ->execute([$slug,$name,$desc,$color,$glyphType,$glyph,$url,$isActive,$isBeta,$sortOrder]);
+                    db()->prepare("INSERT INTO apps (slug,name,description,color,glyph_type,glyph,url,is_active,is_beta,is_ai,sort_order)
+                                   VALUES (?,?,?,?,?,?,?,?,?,?,?)")
+                        ->execute([$slug,$name,$desc,$color,$glyphType,$glyph,$url,$isActive,$isBeta,$isAi,$sortOrder]);
                     $flash = 'เพิ่มแอปพลิเคชันเรียบร้อยแล้ว';
                 } else {
-                    db()->prepare("UPDATE apps SET slug=?,name=?,description=?,color=?,glyph_type=?,glyph=?,url=?,is_active=?,is_beta=?,sort_order=?,updated_at=NOW() WHERE id=?")
-                        ->execute([$slug,$name,$desc,$color,$glyphType,$glyph,$url,$isActive,$isBeta,$sortOrder,$id]);
+                    db()->prepare("UPDATE apps SET slug=?,name=?,description=?,color=?,glyph_type=?,glyph=?,url=?,is_active=?,is_beta=?,is_ai=?,sort_order=?,updated_at=NOW() WHERE id=?")
+                        ->execute([$slug,$name,$desc,$color,$glyphType,$glyph,$url,$isActive,$isBeta,$isAi,$sortOrder,$id]);
                     $flash = 'อัปเดตแอปพลิเคชันเรียบร้อยแล้ว';
                 }
             } catch (\PDOException $e) {
                 $flash     = 'Slug "' . e($slug) . '" ถูกใช้งานแล้ว กรุณาใช้ slug อื่น';
                 $flashType = 'error';
-                $editing   = compact('id','slug','name','desc','color','glyphType','glyph','url','isActive','isBeta','sortOrder');
+                $editing   = compact('id','slug','name','desc','color','glyphType','glyph','url','isActive','isBeta','isAi','sortOrder');
             }
         } else {
             $flash     = implode(' / ', $errors);
             $flashType = 'error';
-            $editing   = compact('id','slug','name','desc','color','glyphType','glyph','url','isActive','isBeta','sortOrder');
+            $editing   = compact('id','slug','name','desc','color','glyphType','glyph','url','isActive','isBeta','isAi','sortOrder');
         }
     }
 }
@@ -319,6 +322,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['edit'])) {
             'url'       => $row['url'],
             'isActive'  => (int) $row['is_active'],
             'isBeta'    => (int) $row['is_beta'],
+            'isAi'      => (int) $row['is_ai'],
             'sortOrder' => (int) $row['sort_order'],
         ];
     }
@@ -527,6 +531,15 @@ function confirmImport(input) {
       <p class="a-hint">เปิดเพื่อแจ้งผู้ใช้ว่าแอปนี้อยู่ในช่วงทดลองใช้งาน</p>
     </div>
 
+    <div class="a-field">
+      <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:14px;font-weight:600;color:var(--text-2)">
+        <input type="checkbox" name="is_ai" value="1"
+               <?= ($editing['isAi'] ?? 0) ? 'checked' : '' ?>>
+        สร้างด้วย AI (แสดงป้าย ★ AI บนไอคอน)
+      </label>
+      <p class="a-hint">เปิดเพื่อระบุว่าแอปนี้ใช้ AI ในการสร้างหรือขับเคลื่อน</p>
+    </div>
+
     <div class="a-form-actions">
       <button type="submit" class="a-btn a-btn-primary">
         <?= $isEditing ? 'บันทึกการเปลี่ยนแปลง' : 'เพิ่มแอปพลิเคชัน' ?>
@@ -613,6 +626,9 @@ function handleDrop(e) {
             <strong><?= e($app['name']) ?></strong>
             <?php if (!empty($app['is_beta'])): ?>
               <span class="badge-beta">BETA</span>
+            <?php endif; ?>
+            <?php if (!empty($app['is_ai'])): ?>
+              <span class="badge-ai">★ AI</span>
             <?php endif; ?>
           </div>
         </td>

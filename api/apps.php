@@ -13,7 +13,7 @@ $method = $_SERVER['REQUEST_METHOD'];
 // ── GET: return active apps + this user's prefs ───────────────────────────
 if ($method === 'GET') {
     $apps = db()
-        ->query("SELECT id, slug, name, description, color, glyph_type, glyph, url, is_beta
+        ->query("SELECT id, slug, name, description, color, glyph_type, glyph, url, is_beta, is_ai
                  FROM apps WHERE is_active = 1 ORDER BY sort_order, id")
         ->fetchAll();
 
