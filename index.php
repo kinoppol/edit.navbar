@@ -227,10 +227,16 @@ function BetaBadge({ dot }) {
     : <span className="beta-badge">BETA</span>;
 }
 
+const AI_STAR = (
+  <svg viewBox="0 0 16 16" width="9" height="9" fill="currentColor" aria-hidden="true">
+    <path d="M8 0 C8 4.4 4.4 8 0 8 C4.4 8 8 11.6 8 16 C8 11.6 11.6 8 16 8 C11.6 8 8 4.4 8 0Z"/>
+  </svg>
+);
+
 function AiBadge({ dot }) {
   return dot
-    ? <span className="ai-dot" title="สร้างด้วย AI" />
-    : <span className="ai-badge">★ AI</span>;
+    ? <span className="ai-dot" title="สร้างด้วย AI">{AI_STAR}</span>
+    : <span className="ai-badge" title="สร้างด้วย AI">{AI_STAR}</span>;
 }
 
 // ── Drag tiles ────────────────────────────────────────────────────────────────
@@ -606,7 +612,7 @@ function DemoPage({ visibleSlugs }) {
                   <span className="quick-name">
                     {a.name}
                     {a.isBeta && <span className="quick-beta-tag">Beta</span>}
-                    {a.isAi && <span className="quick-ai-tag">★ AI</span>}
+                    {a.isAi && <span className="quick-ai-tag">{AI_STAR} AI</span>}
                     <Icon.external className="quick-ext" />
                   </span>
                   <span className="quick-desc">{a.desc}</span>
@@ -984,24 +990,28 @@ a.app-tile { cursor: pointer; }
 
 /* ── AI marker ──────────────────────────────────────────────────────────── */
 .ai-badge {
-  position: absolute; top: -6px; left: -8px;
-  padding: 1px 5px; border-radius: 6px;
+  position: absolute; bottom: -5px; right: -5px;
+  width: 16px; height: 16px; border-radius: 50%;
   background: #7c3aed; color: #fff;
-  font-size: 9px; font-weight: 800; letter-spacing: .4px; line-height: 1.5;
+  display: flex; align-items: center; justify-content: center;
   border: 2px solid var(--surface);
   box-shadow: 0 1px 4px rgba(20,30,55,.25);
   pointer-events: none;
 }
 .ai-dot {
-  position: absolute; top: -3px; left: -3px;
-  width: 11px; height: 11px; border-radius: 50%;
-  background: #7c3aed; border: 2px solid var(--surface);
+  position: absolute; bottom: -3px; right: -3px;
+  width: 12px; height: 12px; border-radius: 50%;
+  background: #7c3aed; color: #fff;
+  display: flex; align-items: center; justify-content: center;
+  border: 1.5px solid var(--surface);
   pointer-events: none;
 }
+.ai-dot svg { width: 6px; height: 6px; }
 .quick-ai-tag {
   padding: 1px 6px; border-radius: 5px;
   background: #ede9fe; color: #6d28d9;
   font-size: 10.5px; font-weight: 800; letter-spacing: .3px;
+  display: inline-flex; align-items: center; gap: 3px;
 }
 [data-theme="dark"] .quick-ai-tag { background: #2e1a5e; color: #a78bfa; }
 </style>
