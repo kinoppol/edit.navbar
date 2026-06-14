@@ -10,7 +10,7 @@ $uid      = $isGuest ? 0 : $authUser['id'];
 
 // ── Fetch active apps ordered by sort_order ──────────────────────────────────
 $appsRaw = db()
-    ->query("SELECT id, slug, name, description, color, glyph_type, glyph, url, is_beta, is_ai
+    ->query("SELECT id, slug, name, description, color, glyph_type, glyph, url, is_beta, is_ai, version_stage
              FROM apps WHERE is_active = 1 ORDER BY sort_order, id")
     ->fetchAll();
 
@@ -83,8 +83,9 @@ $jsApps = array_map(fn($a) => [
     'glyphType' => $a['glyph_type'],
     'glyph'     => $a['glyph'],
     'url'       => $a['url'],
-    'isBeta'    => (bool) (int) $a['is_beta'],
-    'isAi'      => (bool) (int) $a['is_ai'],
+    'isBeta'       => (bool) (int) $a['is_beta'],
+    'isAi'         => (bool) (int) $a['is_ai'],
+    'versionStage' => $a['version_stage'] ?? '',
 ], $appsRaw);
 
 $jsNotifs = array_map(fn($n) => [
@@ -219,12 +220,21 @@ function renderGlyph(app, size) {
   return <span className="app-tile-mono">{app.glyph}</span>;
 }
 
-// Beta badge — overlaid on an app icon to flag a trial app.
-// `dot` renders a compact marker for small icons (hidden-zone chips).
-function BetaBadge({ dot }) {
+// Stage badge — overlaid on an app icon to flag the version stage.
+// Supports: pre-alpha, alpha, beta, rc. `dot` = compact chip variant.
+const STAGE_META = {
+  'pre-alpha': { label: 'Pre-α', title: 'Pre-Alpha',          cls: 'stage-pre-alpha' },
+  'alpha':     { label: 'Alpha', title: 'Alpha',               cls: 'stage-alpha'     },
+  'beta':      { label: 'Beta',  title: 'เวอร์ชันทดลอง (Beta)', cls: 'stage-beta'      },
+  'rc':        { label: 'RC',    title: 'Release Candidate',   cls: 'stage-rc'        },
+};
+
+function BetaBadge({ dot, stage }) {
+  const s = stage || 'beta';
+  const m = STAGE_META[s] || STAGE_META['beta'];
   return dot
-    ? <span className="beta-dot" title="เวอร์ชันทดลอง (Beta)" />
-    : <span className="beta-badge">BETA</span>;
+    ? <span className={"stage-dot " + m.cls} title={m.title} />
+    : <span className={"stage-badge " + m.cls}>{m.label}</span>;
 }
 
 const AI_STAR = (
@@ -251,7 +261,7 @@ function DragTile({ app, dragging, onStart, onEnd, onDropBefore }) {
          title={app.name}>
       <span className="app-tile-icon" style={{ background: app.color }}>
         {renderGlyph(app, 22)}
-        {app.isBeta && <BetaBadge />}
+        {app.versionStage && <BetaBadge stage={app.versionStage} />}
         {app.isAi && <AiBadge />}
       </span>
       <span className="app-tile-name">{app.name}</span>
@@ -270,7 +280,7 @@ function DragChip({ app, dragging, onStart, onEnd, onDropBefore }) {
          title={app.name}>
       <span className="hidden-chip-icon" style={{ background: app.color }}>
         {renderGlyph(app, 13)}
-        {app.isBeta && <BetaBadge dot />}
+        {app.versionStage && <BetaBadge dot stage={app.versionStage} />}
         {app.isAi && <AiBadge dot />}
       </span>
       <span className="hidden-chip-name">{app.name}</span>
@@ -288,7 +298,7 @@ function SimpleTile({ app }) {
        style={{ textDecoration: 'none' }}>
       <span className="app-tile-icon" style={{ background: app.color }}>
         {renderGlyph(app, 22)}
-        {app.isBeta && <BetaBadge />}
+        {app.versionStage && <BetaBadge stage={app.versionStage} />}
         {app.isAi && <AiBadge />}
       </span>
       <span className="app-tile-name">{app.name}</span>
@@ -605,13 +615,13 @@ function DemoPage({ visibleSlugs }) {
                  rel="noopener noreferrer">
                 <span className="quick-icon" style={{ background: a.color }}>
                   {renderGlyph(a, 26)}
-                  {a.isBeta && <BetaBadge />}
+                  {a.versionStage && <BetaBadge stage={a.versionStage} />}
                   {a.isAi && <AiBadge />}
                 </span>
                 <span className="quick-meta">
                   <span className="quick-name">
                     {a.name}
-                    {a.isBeta && <span className="quick-beta-tag">Beta</span>}
+                    {a.versionStage && (() => { const m = STAGE_META[a.versionStage]; return m ? <span className={"quick-stage-tag " + m.cls}>{m.label}</span> : null; })()}
                     {a.isAi && <span className="quick-ai-tag">{AI_STAR} AI</span>}
                     <Icon.external className="quick-ext" />
                   </span>
@@ -964,29 +974,42 @@ a.app-tile { cursor: pointer; }
 .quick-ext  { color: var(--text-3); }
 .quick-desc { font-size: 13.5px; color: var(--text-2); }
 
-/* ── Beta marker ────────────────────────────────────────────────────────── */
-.beta-badge {
+/* ── Stage badge (Pre-Alpha / Alpha / Beta / RC) ────────────────────────── */
+.stage-badge {
   position: absolute; top: -6px; right: -8px;
-  padding: 1px 5px; border-radius: 6px;
-  background: #f59e0b; color: #fff;
+  padding: 1px 5px; border-radius: 6px; color: #fff;
   font-size: 9px; font-weight: 800; letter-spacing: .4px; line-height: 1.5;
   border: 2px solid var(--surface);
   box-shadow: 0 1px 4px rgba(20,30,55,.25);
   pointer-events: none; text-transform: uppercase;
 }
-.beta-dot {
+.stage-dot {
   position: absolute; top: -3px; right: -3px;
   width: 11px; height: 11px; border-radius: 50%;
-  background: #f59e0b; border: 2px solid var(--surface);
+  border: 2px solid var(--surface);
   pointer-events: none;
 }
-.quick-beta-tag {
+.quick-stage-tag {
   padding: 1px 6px; border-radius: 5px;
-  background: #fef3c7; color: #b45309;
   font-size: 10.5px; font-weight: 800; letter-spacing: .3px;
   text-transform: uppercase;
 }
-[data-theme="dark"] .quick-beta-tag { background: #3a2c10; color: #fbbf24; }
+/* Pre-Alpha — red */
+.stage-pre-alpha.stage-badge, .stage-pre-alpha.stage-dot { background: #dc2626; }
+.quick-stage-tag.stage-pre-alpha { background: #fee2e2; color: #991b1b; }
+[data-theme="dark"] .quick-stage-tag.stage-pre-alpha { background: #450a0a; color: #fca5a5; }
+/* Alpha — orange */
+.stage-alpha.stage-badge, .stage-alpha.stage-dot { background: #ea580c; }
+.quick-stage-tag.stage-alpha { background: #ffedd5; color: #9a3412; }
+[data-theme="dark"] .quick-stage-tag.stage-alpha { background: #431407; color: #fdba74; }
+/* Beta — amber (existing) */
+.stage-beta.stage-badge, .stage-beta.stage-dot { background: #f59e0b; }
+.quick-stage-tag.stage-beta { background: #fef3c7; color: #b45309; }
+[data-theme="dark"] .quick-stage-tag.stage-beta { background: #3a2c10; color: #fbbf24; }
+/* RC — green */
+.stage-rc.stage-badge, .stage-rc.stage-dot { background: #16a34a; }
+.quick-stage-tag.stage-rc { background: #dcfce7; color: #166534; }
+[data-theme="dark"] .quick-stage-tag.stage-rc { background: #052e16; color: #86efac; }
 
 /* ── AI marker ──────────────────────────────────────────────────────────── */
 .ai-badge {

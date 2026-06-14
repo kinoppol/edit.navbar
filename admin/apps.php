@@ -62,7 +62,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // ── Export apps (+ icons) as a ZIP backup ──────────────────────────────────
     if ($action === 'export') {
         $rows = db()->query(
-            "SELECT slug, name, description, color, glyph_type, glyph, url, is_active, is_beta, is_ai, sort_order
+            "SELECT slug, name, description, color, glyph_type, glyph, url, is_active, is_beta, is_ai, version_stage, sort_order
              FROM apps ORDER BY sort_order, id"
         )->fetchAll();
 
@@ -76,9 +76,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'glyph'       => $a['glyph'],
             'url'         => $a['url'],
             'is_active'   => (int) $a['is_active'],
-            'is_beta'     => (int) $a['is_beta'],
-            'is_ai'       => (int) $a['is_ai'],
-            'sort_order'  => (int) $a['sort_order'],
+            'is_beta'       => (int) $a['is_beta'],
+            'is_ai'         => (int) $a['is_ai'],
+            'version_stage' => $a['version_stage'] ?? '',
+            'sort_order'    => (int) $a['sort_order'],
         ], $rows);
 
         $files = [
@@ -136,13 +137,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 $allowedExt = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'];
                 $upsert = db()->prepare(
-                    "INSERT INTO apps (slug,name,description,color,glyph_type,glyph,url,is_active,is_beta,is_ai,sort_order)
-                     VALUES (?,?,?,?,?,?,?,?,?,?,?)
+                    "INSERT INTO apps (slug,name,description,color,glyph_type,glyph,url,is_active,is_beta,is_ai,version_stage,sort_order)
+                     VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
                      ON DUPLICATE KEY UPDATE
                         name=VALUES(name), description=VALUES(description), color=VALUES(color),
                         glyph_type=VALUES(glyph_type), glyph=VALUES(glyph), url=VALUES(url),
                         is_active=VALUES(is_active), is_beta=VALUES(is_beta), is_ai=VALUES(is_ai),
-                        sort_order=VALUES(sort_order), updated_at=NOW()"
+                        version_stage=VALUES(version_stage), sort_order=VALUES(sort_order), updated_at=NOW()"
                 );
 
                 $imported = 0;
@@ -178,9 +179,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $glyphType,
                         $glyph,
                         trim((string) ($a['url'] ?? '#')),
-                        !empty($a['is_active']) ? 1 : 0,
-                        !empty($a['is_beta'])   ? 1 : 0,
-                        !empty($a['is_ai'])     ? 1 : 0,
+                        !empty($a['is_active'])    ? 1 : 0,
+                        !empty($a['is_beta'])      ? 1 : 0,
+                        !empty($a['is_ai'])        ? 1 : 0,
+                        in_array($a['version_stage'] ?? '', ['','pre-alpha','alpha','beta','rc']) ? ($a['version_stage'] ?? '') : '',
                         (int) ($a['sort_order'] ?? 0),
                     ]);
                     $imported++;
@@ -226,10 +228,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $color     = trim($_POST['color']       ?? '#2F5BEA');
         $glyphType = in_array($_POST['glyph_type'] ?? '', ['icon', 'mono', 'image']) ? $_POST['glyph_type'] : 'mono';
         $url       = trim($_POST['url']         ?? '#');
-        $isActive  = isset($_POST['is_active']) ? 1 : 0;
-        $isBeta    = isset($_POST['is_beta'])   ? 1 : 0;
-        $isAi      = isset($_POST['is_ai'])     ? 1 : 0;
-        $sortOrder = (int) ($_POST['sort_order'] ?? 0);
+        $isActive     = isset($_POST['is_active']) ? 1 : 0;
+        $isAi         = isset($_POST['is_ai'])     ? 1 : 0;
+        $allowedStages = ['', 'pre-alpha', 'alpha', 'beta', 'rc'];
+        $versionStage  = in_array($_POST['version_stage'] ?? '', $allowedStages) ? ($_POST['version_stage'] ?? '') : '';
+        $isBeta        = $versionStage === 'beta' ? 1 : 0;
+        $sortOrder    = (int) ($_POST['sort_order'] ?? 0);
 
         if (!preg_match('/^#[0-9a-fA-F]{3,8}$/', $color)) $color = '#2F5BEA';
 
@@ -282,24 +286,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (empty($errors)) {
             try {
                 if ($action === 'create') {
-                    db()->prepare("INSERT INTO apps (slug,name,description,color,glyph_type,glyph,url,is_active,is_beta,is_ai,sort_order)
-                                   VALUES (?,?,?,?,?,?,?,?,?,?,?)")
-                        ->execute([$slug,$name,$desc,$color,$glyphType,$glyph,$url,$isActive,$isBeta,$isAi,$sortOrder]);
+                    db()->prepare("INSERT INTO apps (slug,name,description,color,glyph_type,glyph,url,is_active,is_beta,is_ai,version_stage,sort_order)
+                                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?)")
+                        ->execute([$slug,$name,$desc,$color,$glyphType,$glyph,$url,$isActive,$isBeta,$isAi,$versionStage,$sortOrder]);
                     $flash = 'เพิ่มแอปพลิเคชันเรียบร้อยแล้ว';
                 } else {
-                    db()->prepare("UPDATE apps SET slug=?,name=?,description=?,color=?,glyph_type=?,glyph=?,url=?,is_active=?,is_beta=?,is_ai=?,sort_order=?,updated_at=NOW() WHERE id=?")
-                        ->execute([$slug,$name,$desc,$color,$glyphType,$glyph,$url,$isActive,$isBeta,$isAi,$sortOrder,$id]);
+                    db()->prepare("UPDATE apps SET slug=?,name=?,description=?,color=?,glyph_type=?,glyph=?,url=?,is_active=?,is_beta=?,is_ai=?,version_stage=?,sort_order=?,updated_at=NOW() WHERE id=?")
+                        ->execute([$slug,$name,$desc,$color,$glyphType,$glyph,$url,$isActive,$isBeta,$isAi,$versionStage,$sortOrder,$id]);
                     $flash = 'อัปเดตแอปพลิเคชันเรียบร้อยแล้ว';
                 }
             } catch (\PDOException $e) {
                 $flash     = 'Slug "' . e($slug) . '" ถูกใช้งานแล้ว กรุณาใช้ slug อื่น';
                 $flashType = 'error';
-                $editing   = compact('id','slug','name','desc','color','glyphType','glyph','url','isActive','isBeta','isAi','sortOrder');
+                $editing   = compact('id','slug','name','desc','color','glyphType','glyph','url','isActive','isBeta','isAi','versionStage','sortOrder');
             }
         } else {
             $flash     = implode(' / ', $errors);
             $flashType = 'error';
-            $editing   = compact('id','slug','name','desc','color','glyphType','glyph','url','isActive','isBeta','isAi','sortOrder');
+            $editing   = compact('id','slug','name','desc','color','glyphType','glyph','url','isActive','isBeta','isAi','versionStage','sortOrder');
         }
     }
 }
@@ -320,10 +324,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['edit'])) {
             'glyphType' => $row['glyph_type'],
             'glyph'     => $row['glyph'],
             'url'       => $row['url'],
-            'isActive'  => (int) $row['is_active'],
-            'isBeta'    => (int) $row['is_beta'],
-            'isAi'      => (int) $row['is_ai'],
-            'sortOrder' => (int) $row['sort_order'],
+            'isActive'     => (int) $row['is_active'],
+            'isBeta'       => (int) $row['is_beta'],
+            'isAi'         => (int) $row['is_ai'],
+            'versionStage' => $row['version_stage'] ?? '',
+            'sortOrder'    => (int) $row['sort_order'],
         ];
     }
 }
@@ -523,12 +528,15 @@ function confirmImport(input) {
     </div>
 
     <div class="a-field">
-      <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:14px;font-weight:600;color:var(--text-2)">
-        <input type="checkbox" name="is_beta" value="1"
-               <?= ($editing['isBeta'] ?? 0) ? 'checked' : '' ?>>
-        เวอร์ชันทดลอง (แสดงป้าย Beta บนไอคอน)
-      </label>
-      <p class="a-hint">เปิดเพื่อแจ้งผู้ใช้ว่าแอปนี้อยู่ในช่วงทดลองใช้งาน</p>
+      <label class="a-label">สถานะรุ่น (Version Stage)</label>
+      <select name="version_stage" class="a-input">
+        <option value=""       <?= ($editing['versionStage'] ?? '') === ''          ? 'selected' : '' ?>>— ไม่ระบุ —</option>
+        <option value="pre-alpha" <?= ($editing['versionStage'] ?? '') === 'pre-alpha' ? 'selected' : '' ?>>Pre-Alpha</option>
+        <option value="alpha"  <?= ($editing['versionStage'] ?? '') === 'alpha'     ? 'selected' : '' ?>>Alpha</option>
+        <option value="beta"   <?= ($editing['versionStage'] ?? '') === 'beta'      ? 'selected' : '' ?>>Beta</option>
+        <option value="rc"     <?= ($editing['versionStage'] ?? '') === 'rc'        ? 'selected' : '' ?>>Release Candidate (RC)</option>
+      </select>
+      <p class="a-hint">แสดงป้ายสถานะรุ่นบนไอคอนแอป (Pre-Alpha = แดง, Alpha = ส้ม, Beta = เหลือง, RC = เขียว)</p>
     </div>
 
     <div class="a-field">
@@ -624,8 +632,12 @@ function handleDrop(e) {
               </span>
             <?php endif; ?>
             <strong><?= e($app['name']) ?></strong>
-            <?php if (!empty($app['is_beta'])): ?>
-              <span class="badge-beta">BETA</span>
+            <?php
+              $stageLabels = ['pre-alpha'=>['Pre-α','badge-pre-alpha'],'alpha'=>['Alpha','badge-alpha'],'beta'=>['Beta','badge-beta'],'rc'=>['RC','badge-rc']];
+              if (!empty($app['version_stage']) && isset($stageLabels[$app['version_stage']])):
+                [$stageLabel, $stageCls] = $stageLabels[$app['version_stage']];
+            ?>
+              <span class="<?= e($stageCls) ?>"><?= e($stageLabel) ?></span>
             <?php endif; ?>
             <?php if (!empty($app['is_ai'])): ?>
               <span class="badge-ai">★ AI</span>

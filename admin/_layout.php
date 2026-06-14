@@ -150,8 +150,15 @@ button, input, select, textarea { font-family: inherit; }
 [data-theme="dark"] .badge-active   { background: #14291e; color: #86efac; }
 [data-theme="dark"] .badge-inactive { background: #1f2937; color: #9ca3af; }
 
-.badge-beta { display: inline-flex; padding: 2px 7px; border-radius: 6px; font-size: 10.5px; font-weight: 800; letter-spacing: .4px; background: #fef3c7; color: #b45309; }
+.badge-pre-alpha, .badge-alpha, .badge-beta, .badge-rc { display: inline-flex; padding: 2px 7px; border-radius: 6px; font-size: 10.5px; font-weight: 800; letter-spacing: .4px; }
+.badge-pre-alpha { background: #fee2e2; color: #991b1b; }
+[data-theme="dark"] .badge-pre-alpha { background: #450a0a; color: #fca5a5; }
+.badge-alpha { background: #ffedd5; color: #9a3412; }
+[data-theme="dark"] .badge-alpha { background: #431407; color: #fdba74; }
+.badge-beta { background: #fef3c7; color: #b45309; }
 [data-theme="dark"] .badge-beta { background: #3a2c10; color: #fbbf24; }
+.badge-rc { background: #dcfce7; color: #166534; }
+[data-theme="dark"] .badge-rc { background: #052e16; color: #86efac; }
 .badge-ai { display: inline-flex; padding: 2px 7px; border-radius: 6px; font-size: 10.5px; font-weight: 800; letter-spacing: .4px; background: #ede9fe; color: #6d28d9; }
 [data-theme="dark"] .badge-ai { background: #2e1a5e; color: #a78bfa; }
 

@@ -110,10 +110,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 glyph_type  ENUM('icon','mono','image') NOT NULL DEFAULT 'mono',
                 glyph       VARCHAR(255)    NOT NULL DEFAULT '?',
                 url         VARCHAR(500)    NOT NULL DEFAULT '#',
-                is_active   TINYINT(1)      NOT NULL DEFAULT 1,
-                is_beta     TINYINT(1)      NOT NULL DEFAULT 0,
-                is_ai       TINYINT(1)      NOT NULL DEFAULT 0,
-                sort_order  INT             NOT NULL DEFAULT 0,
+                is_active     TINYINT(1)      NOT NULL DEFAULT 1,
+                is_beta       TINYINT(1)      NOT NULL DEFAULT 0,
+                is_ai         TINYINT(1)      NOT NULL DEFAULT 0,
+                version_stage VARCHAR(20)     NOT NULL DEFAULT '',
+                sort_order    INT             NOT NULL DEFAULT 0,
                 created_at  TIMESTAMP       NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 updated_at  TIMESTAMP       NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
                 PRIMARY KEY (id),
@@ -140,6 +141,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $pdo->exec("ALTER TABLE apps ADD COLUMN is_ai TINYINT(1) NOT NULL DEFAULT 0 AFTER is_beta");
             }
             logLine('✅ Schema migration: apps support AI flag');
+
+            // Migration: add version_stage, migrate is_beta=1 → version_stage='beta'
+            $hasStage = $pdo->query("SHOW COLUMNS FROM apps LIKE 'version_stage'")->fetch();
+            if (!$hasStage) {
+                $pdo->exec("ALTER TABLE apps ADD COLUMN version_stage VARCHAR(20) NOT NULL DEFAULT '' AFTER is_ai");
+                $pdo->exec("UPDATE apps SET version_stage = 'beta' WHERE is_beta = 1 AND version_stage = ''");
+            }
+            logLine('✅ Schema migration: apps support version_stage');
 
             // ------------------------------------------------- user_app_prefs
             $pdo->exec("CREATE TABLE IF NOT EXISTS user_app_prefs (
