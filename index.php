@@ -634,13 +634,13 @@ function DemoPage({ visibleSlugs, move }) {
         <div className="welcome">
           <div className="welcome-eyebrow">RVC WORKSPACE</div>
           <h1 className="welcome-title">{title}</h1>
-          <p className="welcome-sub">{sub}</p>
-        </div>
-        {!IS_GUEST && slugs.length > 1 && (
-          <div className="quick-hint">
-            <Icon.grip /><span>ลากการ์ดเพื่อจัดลำดับ — ระบบจำค่าให้อัตโนมัติ</span>
+          <div className="welcome-line">
+            <p className="welcome-sub">{sub}</p>
+            {!IS_GUEST && slugs.length > 1 && (
+              <span className="quick-hint"><Icon.grip /><span>ลากการ์ดเพื่อจัดลำดับ</span></span>
+            )}
           </div>
-        )}
+        </div>
         <div className="quick-grid"
              onDragEnd={endDrag}
              onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget)) setDropAt(null); }}>
@@ -1007,11 +1007,17 @@ a.app-tile { cursor: pointer; }
 
 /* ── Demo page ──────────────────────────────────────────────────────────── */
 .page       { max-width: 1480px; margin: 0 auto; padding: 0 20px; }
-.page-inner { padding: 56px 4px 80px; }
-.welcome    { margin-bottom: 40px; }
-.welcome-eyebrow { font-size: 12px; font-weight: 700; letter-spacing: 1.6px; color: var(--brand); margin-bottom: 12px; }
-.welcome-title   { font-size: 38px; font-weight: 800; letter-spacing: -1px; margin: 0 0 10px; color: var(--text); }
-.welcome-sub     { font-size: 16px; color: var(--text-2); margin: 0; max-width: 540px; }
+.page-inner { padding: 30px 4px 72px; }
+.welcome    { margin-bottom: 22px; }
+.welcome-eyebrow { font-size: 11px; font-weight: 700; letter-spacing: 1.5px; color: var(--brand); margin-bottom: 5px; }
+.welcome-title   { font-size: 27px; font-weight: 800; letter-spacing: -.7px; margin: 0 0 5px; color: var(--text); }
+/* Subtitle and the drag hint share one line on wide screens to keep the head short */
+.welcome-line    { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
+.welcome-sub     { font-size: 14.5px; color: var(--text-2); margin: 0; }
+@media (max-width: 640px) {
+  .page-inner    { padding-top: 22px; }
+  .welcome-title { font-size: 23px; }
+}
 .quick-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(248px, 1fr)); gap: 14px; }
 .quick-card {
   display: flex; align-items: center; gap: 15px;
@@ -1033,8 +1039,8 @@ a.app-tile { cursor: pointer; }
 .quick-card.drop-before { box-shadow: inset 3px 0 0 var(--brand); border-color: var(--brand); }
 .quick-card.drop-after  { box-shadow: inset -3px 0 0 var(--brand); border-color: var(--brand); }
 .quick-hint {
-  display: flex; align-items: center; gap: 7px;
-  font-size: 12.5px; color: var(--text-3); margin: -6px 2px 14px;
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 12.5px; color: var(--text-3);
 }
 @media (prefers-reduced-motion: reduce) {
   .quick-card { transition: none; }
