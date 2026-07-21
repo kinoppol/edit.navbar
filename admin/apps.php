@@ -59,6 +59,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_verify();
     $action = $_POST['action'] ?? '';
 
+    // ── Drag-and-drop reorder (JSON, called by fetch — must run before any HTML)
+    if ($action === 'reorder') {
+        header('Content-Type: application/json; charset=utf-8');
+        $ids = $_POST['ids'] ?? [];
+        if (!is_array($ids) || $ids === []) {
+            http_response_code(400);
+            echo json_encode(['ok' => false, 'error' => 'ไม่มีลำดับที่ส่งมา']);
+            exit;
+        }
+        try {
+            $pdo  = db();
+            $stmt = $pdo->prepare("UPDATE apps SET sort_order = ?, updated_at = NOW() WHERE id = ?");
+            $pdo->beginTransaction();
+            foreach (array_values($ids) as $pos => $id) {
+                $stmt->execute([$pos, (int) $id]);
+            }
+            $pdo->commit();
+            echo json_encode(['ok' => true, 'count' => count($ids)]);
+        } catch (\Throwable $e) {
+            if (db()->inTransaction()) db()->rollBack();
+            http_response_code(500);
+            echo json_encode(['ok' => false, 'error' => 'บันทึกลำดับไม่สำเร็จ']);
+        }
+        exit;
+    }
+
     // ── Export apps (+ icons) as a ZIP backup ──────────────────────────────────
     if ($action === 'export') {
         $rows = db()->query(
@@ -607,6 +633,7 @@ function handleDrop(e) {
   <table class="a-table">
     <thead>
       <tr>
+        <th style="width:44px"></th>
         <th>แอป</th>
         <th>Slug</th>
         <th>คำอธิบาย</th>
@@ -616,9 +643,14 @@ function handleDrop(e) {
         <th>จัดการ</th>
       </tr>
     </thead>
-    <tbody>
+    <tbody id="apps-tbody">
     <?php foreach ($apps as $app): ?>
-      <tr>
+      <tr data-id="<?= (int) $app['id'] ?>">
+        <td class="drag-cell">
+          <span class="drag-handle" draggable="true" title="ลากเพื่อจัดลำดับ" aria-label="ลากเพื่อจัดลำดับ">
+            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg>
+          </span>
+        </td>
         <td>
           <div style="display:flex;align-items:center;gap:10px">
             <?php if ($app['glyph_type'] === 'image' && $app['glyph'] !== ''): ?>
@@ -654,7 +686,7 @@ function handleDrop(e) {
             <span style="color:var(--text-3);font-size:13px">—</span>
           <?php endif; ?>
         </td>
-        <td style="text-align:center;color:var(--text-3)"><?= (int) $app['sort_order'] ?></td>
+        <td style="text-align:center;color:var(--text-3)" class="order-cell"><?= (int) $app['sort_order'] ?></td>
         <td>
           <?php if ($app['is_active']): ?>
             <span class="badge-active">เปิดใช้งาน</span>
@@ -693,5 +725,159 @@ function handleDrop(e) {
   </table>
   <?php endif; ?>
 </div>
+
+<?php if (!empty($apps)): ?>
+<p class="a-hint" style="margin:14px 2px 0">
+  ลากไอคอน <strong>⠿</strong> ทางซ้ายเพื่อจัดลำดับแอป — ระบบบันทึกให้อัตโนมัติ
+</p>
+
+<div class="reorder-toast" id="reorder-toast" hidden></div>
+
+<style>
+.drag-cell { width: 44px; padding-right: 0 !important; }
+.drag-handle {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px; border-radius: 8px;
+  color: var(--text-3); cursor: grab; touch-action: none;
+  transition: background .15s, color .15s;
+}
+.drag-handle:hover { background: var(--hover-strong); color: var(--text); }
+.drag-handle:active { cursor: grabbing; }
+.drag-handle svg { width: 18px; height: 18px; pointer-events: none; }
+tr.is-dragging { opacity: .4; }
+tr.drop-before td { box-shadow: inset 0 2px 0 var(--brand); }
+tr.drop-after  td { box-shadow: inset 0 -2px 0 var(--brand); }
+tr.just-moved td { animation: row-flash 1s ease; }
+@keyframes row-flash {
+  from { background: var(--brand-tint); }
+  to   { background: transparent; }
+}
+.reorder-toast {
+  position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%);
+  z-index: 400; padding: 10px 18px; border-radius: 999px;
+  background: var(--surface); border: 1px solid var(--border);
+  box-shadow: var(--shadow-pop); font-size: 13.5px; font-weight: 600;
+  display: flex; align-items: center; gap: 9px;
+}
+.reorder-toast[hidden] { display: none; }
+.reorder-toast.is-error { color: #b91c1c; }
+.reorder-toast .dot {
+  width: 14px; height: 14px; border-radius: 50%;
+  border: 2px solid var(--border); border-top-color: var(--brand);
+  animation: a-spin .7s linear infinite;
+}
+.reorder-toast.is-done .dot, .reorder-toast.is-error .dot { display: none; }
+@media (prefers-reduced-motion: reduce) {
+  tr.just-moved td { animation: none; }
+}
+</style>
+
+<script>
+(function () {
+  var tbody = document.getElementById('apps-tbody');
+  var toast = document.getElementById('reorder-toast');
+  if (!tbody) return;
+
+  var CSRF = <?= json_encode($csrf) ?>;
+  var dragRow = null, saveTimer = null;
+
+  function showToast(msg, state) {
+    toast.hidden = false;
+    toast.className = 'reorder-toast' + (state ? ' is-' + state : '');
+    toast.innerHTML = '<span class="dot"></span><span></span>';
+    toast.lastChild.textContent = msg;
+    if (state === 'done' || state === 'error') {
+      clearTimeout(toast._t);
+      toast._t = setTimeout(function () { toast.hidden = true; }, 2200);
+    }
+  }
+
+  function clearMarkers() {
+    Array.prototype.forEach.call(tbody.querySelectorAll('.drop-before, .drop-after'), function (r) {
+      r.classList.remove('drop-before', 'drop-after');
+    });
+  }
+
+  // Renumber the visible ลำดับ column so it matches the new positions
+  function renumber() {
+    Array.prototype.forEach.call(tbody.rows, function (row, i) {
+      var cell = row.querySelector('.order-cell');
+      if (cell) cell.textContent = i;
+    });
+  }
+
+  function save() {
+    var ids = Array.prototype.map.call(tbody.rows, function (r) { return r.dataset.id; });
+    var body = new URLSearchParams();
+    body.append('action', 'reorder');
+    body.append('_csrf', CSRF);
+    ids.forEach(function (id) { body.append('ids[]', id); });
+
+    showToast('กำลังบันทึกลำดับ…', 'busy');
+    fetch(location.pathname, {
+      method: 'POST',
+      headers: { 'X-CSRF-Token': CSRF, 'Content-Type': 'application/x-www-form-urlencoded' },
+      credentials: 'same-origin',
+      body: body.toString()
+    })
+    .then(function (r) { return r.json(); })
+    .then(function (d) {
+      if (d && d.ok) showToast('บันทึกลำดับแล้ว', 'done');
+      else throw new Error((d && d.error) || 'error');
+    })
+    .catch(function () {
+      showToast('บันทึกลำดับไม่สำเร็จ — โปรดรีเฟรชหน้า', 'error');
+    });
+  }
+
+  // Handles are draggable; the row they belong to is what actually moves.
+  tbody.addEventListener('dragstart', function (e) {
+    var handle = e.target.closest('.drag-handle');
+    if (!handle) { e.preventDefault(); return; }
+    dragRow = handle.closest('tr');
+    dragRow.classList.add('is-dragging');
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', dragRow.dataset.id);  // Firefox needs a payload
+  });
+
+  tbody.addEventListener('dragover', function (e) {
+    if (!dragRow) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    var over = e.target.closest('tr');
+    if (!over || over === dragRow || over.parentNode !== tbody) return;
+    var rect   = over.getBoundingClientRect();
+    var before = (e.clientY - rect.top) < rect.height / 2;
+    clearMarkers();
+    over.classList.add(before ? 'drop-before' : 'drop-after');
+  });
+
+  tbody.addEventListener('drop', function (e) {
+    if (!dragRow) return;
+    e.preventDefault();
+    var over = e.target.closest('tr');
+    if (over && over !== dragRow && over.parentNode === tbody) {
+      var rect = over.getBoundingClientRect();
+      if ((e.clientY - rect.top) < rect.height / 2) tbody.insertBefore(dragRow, over);
+      else tbody.insertBefore(dragRow, over.nextSibling);
+
+      dragRow.classList.add('just-moved');
+      setTimeout(function (row) { return function () { row.classList.remove('just-moved'); }; }(dragRow), 1000);
+
+      renumber();
+      clearTimeout(saveTimer);
+      saveTimer = setTimeout(save, 350);   // coalesce rapid consecutive drags
+    }
+    clearMarkers();
+  });
+
+  tbody.addEventListener('dragend', function () {
+    if (dragRow) dragRow.classList.remove('is-dragging');
+    dragRow = null;
+    clearMarkers();
+  });
+})();
+</script>
+<?php endif; ?>
 
 <?php admin_footer(); ?>
