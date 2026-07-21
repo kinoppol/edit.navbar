@@ -50,6 +50,8 @@ Default credentials after setup:
 
 App visibility/order for a user = global `apps.sort_order` overridden by `user_app_prefs.sort_order` and `is_hidden`. Both `index.php` and `api/apps.php` share the same merge logic (sort by `sort_order_user`, split into `$visible`/`$hidden`).
 
+`migration.php` (repo root) applies the schema changes to an **existing** install using the credentials already in `config/db.php` — no form, no database creation, no seeding. Run it in a browser (`/edit.navbar/migration.php`, admin login required) or from the CLI (`php migration.php`). Every step is guarded (`SHOW TABLES` / `SHOW COLUMNS` / `SHOW INDEX`) and logs `✅ applied` vs `↔︎ already present`. When you add a column, add it in three places: the `CREATE TABLE` in `setup.php`, the guarded `ALTER` in `setup.php`, and a `mig_step()` in `migration.php`.
+
 `setup.php` is the single source of schema truth **and the migration runner**: in addition to `CREATE TABLE IF NOT EXISTS`, it runs guarded `ALTER TABLE` blocks (e.g. widening `glyph`, adding `is_beta` via a `SHOW COLUMNS … LIKE` check) so re-running it migrates existing installs. Add any new column both to its `CREATE TABLE` and as an idempotent `ALTER` here.
 
 `apps.is_beta` (TINYINT, default 0) flags an app as a trial; when set, a "BETA" badge is overlaid on its icon everywhere it renders (admin table, app-launcher tiles, hidden-zone chips, quick-cards).
