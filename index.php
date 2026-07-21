@@ -199,6 +199,7 @@ const Icon = {
   chevronDn: (p) => (<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" {...p}><path d="m6 10 6 6 6-6"/></svg>),
   plus:      (p) => (<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" {...p}><path d="M12 5v14M5 12h14"/></svg>),
   meet:      (p) => (<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...p}><rect x="3" y="6.5" width="12" height="11" rx="2.4"/><path d="M15 10.5 21 7v10l-6-3.5"/></svg>),
+  grip:      (p) => (<svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" {...p}><circle cx="9" cy="6" r="1.5"/><circle cx="15" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="18" r="1.5"/></svg>),
   external:  (p) => (<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...p}><path d="M14 4h6v6M20 4l-9 9M18 13.5V19a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5.5"/></svg>),
 };
 
@@ -587,7 +588,38 @@ function Header({ theme, setTheme, onHide, appsVisible, appsHidden, moveApp,
 }
 
 // ── Demo page ─────────────────────────────────────────────────────────────────
-function DemoPage({ visibleSlugs }) {
+function DemoPage({ visibleSlugs, move }) {
+  const dragSlug = useRef(null);
+  const [dragging, setDragging] = useState(null);
+  const [dropAt, setDropAt]     = useState(null);   // { slug, before }
+
+  const slugs = visibleSlugs.filter(s => APP_MAP[s]);
+
+  const onCardDragOver = (e, slug) => {
+    if (!dragSlug.current || IS_GUEST) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    const r = e.currentTarget.getBoundingClientRect();
+    setDropAt({ slug, before: (e.clientX - r.left) < r.width / 2 });
+  };
+
+  const onCardDrop = (e, slug) => {
+    if (!dragSlug.current || IS_GUEST) return;
+    e.preventDefault();
+    const r = e.currentTarget.getBoundingClientRect();
+    const before = (e.clientX - r.left) < r.width / 2;
+    // move() inserts *before* the given slug (null = append to the end)
+    let target = slug;
+    if (!before) {
+      const i = slugs.indexOf(slug);
+      target = i >= 0 && i + 1 < slugs.length ? slugs[i + 1] : null;
+    }
+    if (target !== dragSlug.current) move(dragSlug.current, "visible", target);
+    endDrag();
+  };
+
+  const endDrag = () => { dragSlug.current = null; setDragging(null); setDropAt(null); };
+
   const hour = new Date().getHours();
   const greeting = hour < 12 ? 'ตอนเช้า' : hour < 17 ? 'ตอนบ่าย' : 'ตอนเย็น';
   const title = IS_GUEST
@@ -604,15 +636,36 @@ function DemoPage({ visibleSlugs }) {
           <h1 className="welcome-title">{title}</h1>
           <p className="welcome-sub">{sub}</p>
         </div>
-        <div className="quick-grid">
-          {visibleSlugs.filter(s => APP_MAP[s]).map(slug => {
+        {!IS_GUEST && slugs.length > 1 && (
+          <div className="quick-hint">
+            <Icon.grip /><span>ลากการ์ดเพื่อจัดลำดับ — ระบบจำค่าให้อัตโนมัติ</span>
+          </div>
+        )}
+        <div className="quick-grid"
+             onDragEnd={endDrag}
+             onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget)) setDropAt(null); }}>
+          {slugs.map(slug => {
             const a = APP_MAP[slug];
+            const cls = "quick-card"
+              + (dragging === slug ? " is-dragging" : "")
+              + (dropAt && dropAt.slug === slug ? (dropAt.before ? " drop-before" : " drop-after") : "");
             return (
-              <a key={a.slug} className="quick-card"
+              <a key={a.slug} className={cls}
                  href={a.url && a.url !== '#' ? a.url : '#'}
                  onClick={a.url === '#' ? e => e.preventDefault() : undefined}
                  target={a.url && a.url !== '#' ? '_blank' : undefined}
-                 rel="noopener noreferrer">
+                 rel="noopener noreferrer"
+                 draggable={!IS_GUEST}
+                 onDragStart={e => {
+                   if (IS_GUEST) return;
+                   e.dataTransfer.effectAllowed = "move";
+                   e.dataTransfer.setData("text/plain", a.slug);
+                   dragSlug.current = a.slug;
+                   setDragging(a.slug);
+                 }}
+                 onDragOver={e => onCardDragOver(e, a.slug)}
+                 onDrop={e => onCardDrop(e, a.slug)}>
+                {!IS_GUEST && <span className="quick-grip" aria-hidden="true"><Icon.grip /></span>}
                 <span className="quick-icon" style={{ background: a.color }}>
                   {renderGlyph(a, 26)}
                   {a.versionStage && <BetaBadge stage={a.versionStage} />}
@@ -706,7 +759,7 @@ function App() {
               onClick={() => setNavHidden(false)} aria-label="แสดงแถบนำทาง">
         <Icon.chevronDn /><span>แสดงแถบนำทาง</span>
       </button>
-      <DemoPage visibleSlugs={apps.visible} />
+      <DemoPage visibleSlugs={apps.visible} move={moveApp} />
     </React.Fragment>
   );
 }
@@ -967,6 +1020,25 @@ a.app-tile { cursor: pointer; }
   transition: transform .15s, box-shadow .15s, border-color .15s;
 }
 .quick-card:hover { transform: translateY(-2px); box-shadow: 0 10px 26px rgba(20,30,55,.10); border-color: var(--border-strong); }
+
+/* ── Quick-card drag to reorder ── */
+.quick-card { position: relative; }
+.quick-grip {
+  position: absolute; top: 8px; left: 8px;
+  color: var(--text-3); opacity: 0; cursor: grab;
+  transition: opacity .15s;
+}
+.quick-card:hover .quick-grip { opacity: .75; }
+.quick-card.is-dragging { opacity: .4; transform: none; cursor: grabbing; }
+.quick-card.drop-before { box-shadow: inset 3px 0 0 var(--brand); border-color: var(--brand); }
+.quick-card.drop-after  { box-shadow: inset -3px 0 0 var(--brand); border-color: var(--brand); }
+.quick-hint {
+  display: flex; align-items: center; gap: 7px;
+  font-size: 12.5px; color: var(--text-3); margin: -6px 2px 14px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .quick-card { transition: none; }
+}
 .quick-icon { position: relative; width: 50px; height: 50px; border-radius: 15px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; box-shadow: 0 3px 10px rgba(20,30,55,.16); }
 .quick-icon .app-tile-mono { font-size: 18px; }
 .quick-meta { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
