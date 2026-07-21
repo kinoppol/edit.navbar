@@ -111,8 +111,7 @@ $csrf = csrf_token();
     <code>people_email</code> → อีเมล<br>
     ผู้ใช้เดิมจะถูกอัปเดตโดย <strong>ไม่เปลี่ยนวันที่สร้างบัญชี (created_at)</strong>
   </p>
-  <form method="POST"
-        onsubmit="return confirm('เริ่มโอนข้อมูลผู้ใช้จากแหล่งข้อมูลภายนอก?')">
+  <form method="POST" id="import-form">
     <input type="hidden" name="_csrf"  value="<?= e($csrf) ?>">
     <input type="hidden" name="action" value="run_import">
     <div class="a-field">
@@ -126,5 +125,103 @@ $csrf = csrf_token();
     </div>
   </form>
 </div>
+
+<!-- ── Confirm modal ─────────────────────────────────────────────────────── -->
+<div class="a-modal-backdrop" id="confirm-modal" role="dialog" aria-modal="true"
+     aria-labelledby="confirm-title" hidden>
+  <div class="a-modal">
+    <div class="a-modal-icon">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3.5-7.1"/><path d="M21 3v5h-5"/></svg>
+    </div>
+    <h2 class="a-modal-title" id="confirm-title">เริ่มโอนข้อมูลผู้ใช้?</h2>
+    <p class="a-modal-body">
+      ระบบจะดึงข้อมูลจาก <strong><?= e(rtrim($baseUrl, '/')) ?></strong>
+      แล้วเพิ่ม/อัปเดตบัญชีผู้ใช้ที่ <code>people_exit = 0</code><br>
+      ขั้นตอนนี้อาจใช้เวลาหลายนาที โปรดอย่าปิดหน้านี้ระหว่างดำเนินการ
+    </p>
+    <div class="a-modal-actions">
+      <button type="button" class="a-btn a-btn-ghost"   id="confirm-cancel">ยกเลิก</button>
+      <button type="button" class="a-btn a-btn-primary" id="confirm-ok">เริ่มโอนข้อมูล</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Progress modal ────────────────────────────────────────────────────── -->
+<div class="a-modal-backdrop" id="busy-modal" role="dialog" aria-modal="true"
+     aria-labelledby="busy-title" hidden>
+  <div class="a-modal a-busy">
+    <div class="a-spinner"></div>
+    <h2 class="a-modal-title" id="busy-title">กำลังโอนข้อมูลผู้ใช้…</h2>
+    <p class="a-modal-body" style="margin-bottom:0">
+      โปรดอย่าปิดหรือรีเฟรชหน้านี้จนกว่าจะเสร็จสิ้น
+    </p>
+    <div class="a-progress"></div>
+    <div class="a-busy-step" id="busy-step" aria-live="polite"></div>
+  </div>
+</div>
+
+<script>
+(function () {
+  var form    = document.getElementById('import-form');
+  var confirm = document.getElementById('confirm-modal');
+  var busy    = document.getElementById('busy-modal');
+  var step    = document.getElementById('busy-step');
+  if (!form || !confirm || !busy) return;
+
+  var lastFocus = null;
+
+  function openConfirm() {
+    lastFocus = document.activeElement;
+    confirm.hidden = false;
+    document.getElementById('confirm-ok').focus();
+  }
+  function closeConfirm() {
+    confirm.hidden = true;
+    if (lastFocus) lastFocus.focus();
+  }
+
+  // Rotating status lines — the request is a single POST, so these communicate
+  // "still working" rather than real per-stage progress.
+  var steps = [
+    'กำลังเชื่อมต่อแหล่งข้อมูล…',
+    'กำลังดาวน์โหลดรายชื่อผู้ใช้…',
+    'กำลังตรวจสอบและเข้ารหัสรหัสผ่าน…',
+    'กำลังบันทึกลงฐานข้อมูล…',
+    'ยังดำเนินการอยู่ โปรดรอสักครู่…'
+  ];
+
+  function showBusy() {
+    confirm.hidden = true;
+    busy.hidden = false;
+    var btn = form.querySelector('button[type="submit"]');
+    if (btn) { btn.disabled = true; btn.textContent = 'กำลังดำเนินการ…'; }
+
+    var i = 0;
+    step.textContent = steps[0];
+    setInterval(function () {
+      i = Math.min(i + 1, steps.length - 1);
+      step.textContent = steps[i];
+    }, 4000);
+  }
+
+  // The confirm modal replaces the browser's confirm() — the form only really
+  // submits after the user accepts it.
+  form.addEventListener('submit', function (ev) {
+    ev.preventDefault();
+    openConfirm();
+  });
+
+  document.getElementById('confirm-ok').addEventListener('click', function () {
+    showBusy();
+    // A disabled submit button is not serialised, so post the form directly.
+    HTMLFormElement.prototype.submit.call(form);
+  });
+  document.getElementById('confirm-cancel').addEventListener('click', closeConfirm);
+  confirm.addEventListener('click', function (e) { if (e.target === confirm) closeConfirm(); });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && !confirm.hidden) closeConfirm();
+  });
+})();
+</script>
 
 <?php admin_footer(); ?>
