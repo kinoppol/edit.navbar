@@ -36,10 +36,10 @@ function mig_log(string $msg): void
 }
 
 /** Run $fn only when $name has not been applied yet (checked by $fn itself). */
-function mig_step(string $name, callable $fn): void
+function mig_step(string $name, callable $fn, string $noop = 'มีอยู่แล้ว'): void
 {
     $changed = $fn(db());
-    mig_log(($changed ? '✅ ' : '↔︎ ') . $name . ($changed ? '' : ' (มีอยู่แล้ว)'));
+    mig_log(($changed ? '✅ ' : '↔︎ ') . $name . ($changed ? '' : ' (' . $noop . ')'));
 }
 
 function mig_has_table(PDO $pdo, string $table): bool
@@ -108,6 +108,29 @@ try {
         $pdo->exec("ALTER TABLE users ADD UNIQUE KEY uq_username (username)");
         return true;
     });
+
+    // ── auth_tokens: "ลงชื่อค้างไว้" remember-me cookies ─────────────────────
+    mig_step('ตาราง auth_tokens', function (PDO $pdo): bool {
+        if (mig_has_table($pdo, 'auth_tokens')) return false;
+        $pdo->exec("CREATE TABLE auth_tokens (
+            id             INT UNSIGNED NOT NULL AUTO_INCREMENT,
+            user_id        INT UNSIGNED NOT NULL,
+            selector       VARCHAR(32)  NOT NULL,
+            validator_hash CHAR(64)     NOT NULL,
+            expires_at     DATETIME     NOT NULL,
+            created_at     TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            UNIQUE KEY uq_selector (selector),
+            CONSTRAINT fk_token_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+        return true;
+    });
+
+    // Housekeeping: drop expired remember-me tokens
+    mig_step('ล้าง auth_tokens ที่หมดอายุ', function (PDO $pdo): bool {
+        if (!mig_has_table($pdo, 'auth_tokens')) return false;
+        return $pdo->exec("DELETE FROM auth_tokens WHERE expires_at < NOW()") > 0;
+    }, 'ไม่มีรายการที่หมดอายุ');
 
     // ── settings: runtime config editable from /admin/settings.php ───────────
     mig_step('ตาราง settings', function (PDO $pdo): bool {

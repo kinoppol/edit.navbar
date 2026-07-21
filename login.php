@@ -44,6 +44,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     'avatar_color' => $user['avatar_color'],
                     'role'         => $user['role'],
                 ];
+                if (!empty($_POST['remember'])) {
+                    remember_issue((int) $user['id']);
+                }
                 header('Location: ' . APP_BASE . '/index.php');
                 exit;
             } else {
@@ -144,6 +147,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   }
   button[type="submit"]:hover  { opacity: .9; }
   button[type="submit"]:active { transform: scale(.98); }
+  input[type="text"] {
+    width: 100%; padding: 11px 14px;
+    background: var(--input-bg); color: var(--text);
+    border: 1px solid var(--border); border-radius: 10px;
+    font-family: inherit; font-size: 14.5px;
+    outline: none; transition: border-color .15s, box-shadow .15s;
+  }
+  input[type="text"]:focus { border-color: var(--brand); box-shadow: 0 0 0 3px var(--ring); }
+  .remember {
+    display: flex; align-items: center; gap: 9px;
+    font-size: 13.5px; font-weight: 500; color: var(--text-2);
+    margin: 2px 0 4px; cursor: pointer;
+  }
+  .remember input { width: 16px; height: 16px; accent-color: var(--brand); cursor: pointer; margin: 0; }
+  .back-link {
+    display: block; text-align: center; margin-top: 22px;
+    font-size: 13.5px; font-weight: 600; color: var(--text-2);
+    text-decoration: none; transition: color .15s;
+  }
+  .back-link:hover { color: var(--brand); }
 </style>
 </head>
 <body>
@@ -160,18 +183,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
   <form method="POST" autocomplete="on" novalidate>
     <div class="field">
-      <label for="email">อีเมล</label>
-      <input type="email" id="email" name="email"
+      <label for="email">อีเมลหรือรหัสประจำตัว</label>
+      <input type="text" id="email" name="email"
              value="<?= e($_POST['email'] ?? '') ?>"
-             placeholder="you@rvc.ac.th" autocomplete="email" required>
+             placeholder="you@rvc.ac.th หรือ 1440100096241"
+             autocomplete="username" required>
     </div>
     <div class="field">
       <label for="password">รหัสผ่าน</label>
       <input type="password" id="password" name="password"
              placeholder="••••••••" autocomplete="current-password" required>
     </div>
+    <label class="remember">
+      <input type="checkbox" name="remember" value="1" <?= !empty($_POST['remember']) ? 'checked' : '' ?>>
+      <span>ลงชื่อเข้าใช้ค้างไว้ (30 วัน)</span>
+    </label>
     <button type="submit">เข้าสู่ระบบ</button>
   </form>
+
+  <a class="back-link" href="<?= e(APP_BASE) ?>/index.php">← กลับหน้าแอปพลิเคชัน</a>
 </div>
 </body>
 </html>

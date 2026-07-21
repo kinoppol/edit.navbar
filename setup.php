@@ -109,6 +109,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             logLine('✅ Schema migration: users support username');
 
+            // ---------------------------------------------------- auth_tokens
+            // "ลงชื่อค้างไว้" — selector/validator pairs; validator stored hashed
+            $pdo->exec("CREATE TABLE IF NOT EXISTS auth_tokens (
+                id             INT UNSIGNED NOT NULL AUTO_INCREMENT,
+                user_id        INT UNSIGNED NOT NULL,
+                selector       VARCHAR(32)  NOT NULL,
+                validator_hash CHAR(64)     NOT NULL,
+                expires_at     DATETIME     NOT NULL,
+                created_at     TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (id),
+                UNIQUE KEY uq_selector (selector),
+                CONSTRAINT fk_token_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+            logLine('✅ Table <code>auth_tokens</code> ready');
+
             // ------------------------------------------------------- settings
             $pdo->exec("CREATE TABLE IF NOT EXISTS settings (
                 skey       VARCHAR(100) NOT NULL,

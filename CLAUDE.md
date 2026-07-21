@@ -44,6 +44,7 @@ Default credentials after setup:
 |---|---|
 | `users` | Auth credentials, name, initials, avatar colour, role (`user`/`admin`), `username` (unique, nullable — the external `people_id`) |
 | `settings` | Key/value runtime config editable by admins (`skey`/`svalue`) |
+| `auth_tokens` | "ลงชื่อค้างไว้" remember-me cookies (selector + hashed validator, 30 days) |
 | `apps` | App catalogue: slug, name, description, colour, glyph_type, glyph, URL, is_active, `is_beta`, sort_order |
 | `user_app_prefs` | Per-user overrides: `(user_id, app_id)` PK, `is_hidden`, `sort_order` |
 | `notifications` | Per-user notification feed linked to an app |
@@ -67,6 +68,10 @@ Because `admin_head()` emits HTML, any handler that streams a file (e.g. the ZIP
 `admin/apps.php` has `export`/`import` POST actions that back up the whole app catalogue (apps.json + manifest.json + the `assets/app-icons/` files) as a ZIP. Import upserts by `slug` (`ON DUPLICATE KEY UPDATE`) inside a transaction and restores icon files (path-traversal-safe via `basename()` + an extension allowlist).
 
 ZIP I/O is **pure-PHP** in `admin/_zip.php` (`rvc_zip_create()` / `rvc_zip_read()`) — the `zip`/ZipArchive extension is **not** enabled on this install, so these build/parse the archive manually using only zlib (`gzdeflate`/`gzinflate`/`crc32`, which are available). Reading supports store (0) and deflate (8) and parses via the central directory.
+
+### Remember me
+
+`login.php` has a "ลงชื่อเข้าใช้ค้างไว้ (30 วัน)" checkbox. On success it calls `remember_issue()` (`config/auth.php`), which stores a random selector + **sha256-hashed** validator in `auth_tokens` and sets the `rvc_remember` cookie (`selector:validator`, HttpOnly/SameSite=Strict, Secure under HTTPS). `current_user()` and `require_auth()` fall back to `remember_restore()`, which validates with `hash_equals`, rotates the token (single-use) and regenerates the session id. `logout.php` calls `remember_clear()`. Expired rows are purged by `migration.php`.
 
 ### External user import (RMS)
 
