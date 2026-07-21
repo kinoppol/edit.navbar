@@ -258,6 +258,8 @@ button, input, select, textarea { font-family: inherit; }
            class="a-nav-link <?= $currentPage === 'apps' ? 'active' : '' ?>">แอปพลิเคชัน</a>
         <a href="<?= e($base) ?>/admin/users.php"
            class="a-nav-link <?= $currentPage === 'users' ? 'active' : '' ?>">ผู้ใช้</a>
+        <a href="<?= e($base) ?>/admin/settings.php"
+           class="a-nav-link <?= $currentPage === 'settings' ? 'active' : '' ?>">ตั้งค่า</a>
       </nav>
     </div>
     <div class="a-header-right">

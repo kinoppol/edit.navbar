@@ -88,6 +88,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // ---------------------------------------------------------- users
             $pdo->exec("CREATE TABLE IF NOT EXISTS users (
                 id            INT UNSIGNED    NOT NULL AUTO_INCREMENT,
+                username      VARCHAR(100)    DEFAULT NULL,
                 name          VARCHAR(100)    NOT NULL,
                 email         VARCHAR(150)    NOT NULL,
                 password_hash VARCHAR(255)    NOT NULL,
@@ -96,9 +97,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 role          ENUM('user','admin') NOT NULL DEFAULT 'user',
                 created_at    TIMESTAMP       NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 PRIMARY KEY (id),
-                UNIQUE KEY uq_email (email)
+                UNIQUE KEY uq_email (email),
+                UNIQUE KEY uq_username (username)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
             logLine('✅ Table <code>users</code> ready');
+
+            // Migration for existing installs: add username (external people_id)
+            if (!$pdo->query("SHOW COLUMNS FROM users LIKE 'username'")->fetch()) {
+                $pdo->exec("ALTER TABLE users ADD COLUMN username VARCHAR(100) DEFAULT NULL AFTER id");
+                $pdo->exec("ALTER TABLE users ADD UNIQUE KEY uq_username (username)");
+            }
+            logLine('✅ Schema migration: users support username');
+
+            // ------------------------------------------------------- settings
+            $pdo->exec("CREATE TABLE IF NOT EXISTS settings (
+                skey       VARCHAR(100) NOT NULL,
+                svalue     TEXT         NOT NULL,
+                updated_at TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                PRIMARY KEY (skey)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+            $pdo->prepare("INSERT IGNORE INTO settings (skey, svalue) VALUES (?, ?)")
+                ->execute(['user_import_base_url', 'http://rms.rvc.ac.th']);
+            logLine('✅ Table <code>settings</code> ready');
 
             // ----------------------------------------------------------- apps
             $pdo->exec("CREATE TABLE IF NOT EXISTS apps (

@@ -21,8 +21,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $error = 'กรุณากรอกอีเมลและรหัสผ่าน';
     } else {
         try {
-            $stmt = db()->prepare("SELECT id, name, email, password_hash, initials, avatar_color, role FROM users WHERE email = ? LIMIT 1");
-            $stmt->execute([$email]);
+            // Imported users sign in with their people_id (username) or their email
+            try {
+                $stmt = db()->prepare("SELECT id, name, email, password_hash, initials, avatar_color, role
+                                       FROM users WHERE email = ? OR username = ? LIMIT 1");
+                $stmt->execute([$email, $email]);
+            } catch (\PDOException $e) {
+                // Install predates the username column (run setup.php to migrate)
+                $stmt = db()->prepare("SELECT id, name, email, password_hash, initials, avatar_color, role
+                                       FROM users WHERE email = ? LIMIT 1");
+                $stmt->execute([$email]);
+            }
             $user = $stmt->fetch();
 
             if ($user && password_verify($password, $user['password_hash'])) {

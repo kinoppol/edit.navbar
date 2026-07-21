@@ -42,7 +42,8 @@ Default credentials after setup:
 
 | Table | Purpose |
 |---|---|
-| `users` | Auth credentials, name, initials, avatar colour, role (`user`/`admin`) |
+| `users` | Auth credentials, name, initials, avatar colour, role (`user`/`admin`), `username` (unique, nullable — the external `people_id`) |
+| `settings` | Key/value runtime config editable by admins (`skey`/`svalue`) |
 | `apps` | App catalogue: slug, name, description, colour, glyph_type, glyph, URL, is_active, `is_beta`, sort_order |
 | `user_app_prefs` | Per-user overrides: `(user_id, app_id)` PK, `is_hidden`, `sort_order` |
 | `notifications` | Per-user notification feed linked to an app |
@@ -64,6 +65,12 @@ Because `admin_head()` emits HTML, any handler that streams a file (e.g. the ZIP
 `admin/apps.php` has `export`/`import` POST actions that back up the whole app catalogue (apps.json + manifest.json + the `assets/app-icons/` files) as a ZIP. Import upserts by `slug` (`ON DUPLICATE KEY UPDATE`) inside a transaction and restores icon files (path-traversal-safe via `basename()` + an extension allowlist).
 
 ZIP I/O is **pure-PHP** in `admin/_zip.php` (`rvc_zip_create()` / `rvc_zip_read()`) — the `zip`/ZipArchive extension is **not** enabled on this install, so these build/parse the archive manually using only zlib (`gzdeflate`/`gzinflate`/`crc32`, which are available). Reading supports store (0) and deflate (8) and parses via the central directory.
+
+### External user import (RMS)
+
+`admin/settings.php` (nav: **ตั้งค่า**) lets an admin set the **base URL only** of the external people API — stored in `settings` under key `user_import_base_url` (default `http://rms.rvc.ac.th`) via `rvc_setting_get()`/`rvc_setting_set()` in `config/settings.php`. The path+query is hardcoded as `RVC_IMPORT_PATH` (`/api_connection.php?app_name=nutty&data=people`) in `config/user_import.php`.
+
+`rvc_user_import_run()` fetches the JSON (curl, falling back to `file_get_contents`), accepts either a bare list or a wrapper object, and imports only rows with `people_exit == 0`. Mapping: `people_id` → `users.username` (the upsert key), `people_name` + `" "` + `people_surname` → `name`, `ath_pass` → bcrypt `password_hash`, `people_email` → `email` (falls back to `<people_id>@rvc.ac.th` when missing/invalid, since `email` is UNIQUE NOT NULL). Re-imports UPDATE and never touch `created_at`; email collisions with a different user are caught per-row and reported instead of aborting. `login.php` accepts either the email or the username.
 
 ### React / frontend
 
